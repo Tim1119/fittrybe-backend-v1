@@ -150,6 +150,39 @@ class TestLoginView:
         assert "refresh" in resp.data["data"]
         assert resp.data["data"]["email"] == user.email
 
+    def test_login_response_includes_onboarding_data(self, api_client):
+        user = UserFactory()
+        resp = api_client.post(
+            self.URL,
+            {"email": user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        onboarding = resp.data["data"]["onboarding"]
+        assert "status" in onboarding
+        assert "is_completed" in onboarding
+        assert "is_first_login" in onboarding
+
+    def test_is_first_login_set_to_false_after_first_login(self, api_client):
+        user = UserFactory()
+        assert user.is_first_login is True
+        api_client.post(
+            self.URL,
+            {"email": user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        user.refresh_from_db()
+        assert user.is_first_login is False
+
+    def test_is_first_login_true_in_first_login_response(self, api_client):
+        user = UserFactory()
+        resp = api_client.post(
+            self.URL,
+            {"email": user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        assert resp.data["data"]["onboarding"]["is_first_login"] is True
+
     def test_wrong_password_returns_401(self, api_client):
         user = UserFactory()
         resp = api_client.post(
@@ -283,6 +316,14 @@ class TestMeView:
         assert resp.status_code == status.HTTP_200_OK
         assert "email" in resp.data["data"]
         assert "role" in resp.data["data"]
+
+    def test_me_response_includes_onboarding_data(self, auth_client):
+        resp = auth_client.get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        onboarding = resp.data["data"]["onboarding"]
+        assert "status" in onboarding
+        assert "is_completed" in onboarding
+        assert "is_first_login" in onboarding
 
     def test_unauthenticated_returns_401(self, api_client):
         resp = api_client.get(self.URL)

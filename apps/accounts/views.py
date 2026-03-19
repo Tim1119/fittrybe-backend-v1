@@ -228,6 +228,11 @@ class LoginView(TokenObtainPairView):
             except User.DoesNotExist:
                 return response
 
+            is_first = user.is_first_login
+            if is_first:
+                user.is_first_login = False
+                user.save(update_fields=["is_first_login"])
+
             return APIResponse.success(
                 data={
                     "access": response.data.get("access"),
@@ -235,6 +240,12 @@ class LoginView(TokenObtainPairView):
                     "email": user.email,
                     "role": user.role,
                     "subscription": _get_subscription_data(user),
+                    "onboarding": {
+                        "status": user.onboarding_status,
+                        "is_completed": user.onboarding_status
+                        == user.OnboardingStatus.COMPLETED,
+                        "is_first_login": is_first,
+                    },
                 },
                 message="Login successful.",
             )
@@ -429,11 +440,18 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        serializer = UserProfileSerializer(request.user)
+        user = request.user
+        serializer = UserProfileSerializer(user)
         return APIResponse.success(
             data={
                 **serializer.data,
-                "subscription": _get_subscription_data(request.user),
+                "subscription": _get_subscription_data(user),
+                "onboarding": {
+                    "status": user.onboarding_status,
+                    "is_completed": user.onboarding_status
+                    == user.OnboardingStatus.COMPLETED,
+                    "is_first_login": user.is_first_login,
+                },
             },
             message="Profile retrieved successfully.",
         )

@@ -5,8 +5,10 @@ Subscription models — Fit Trybe billing system.
 from django.conf import settings
 from django.db import models
 
+from apps.core.models import BaseModel
 
-class PlanConfig(models.Model):
+
+class PlanConfig(BaseModel):
     class Plan(models.TextChoices):
         BASIC = "basic", "Basic"
         PRO = "pro", "Pro"
@@ -26,8 +28,6 @@ class PlanConfig(models.Model):
     grace_period_days = models.PositiveIntegerField(default=7)
     is_active = models.BooleanField(default=True)
     features = models.JSONField(default=list)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["plan"]
@@ -41,7 +41,7 @@ class PlanConfig(models.Model):
         return cls.objects.get(plan=plan, is_active=True)
 
 
-class Subscription(models.Model):
+class Subscription(BaseModel):
     class Status(models.TextChoices):
         TRIAL = "trial", "Trial"
         ACTIVE = "active", "Active"
@@ -79,8 +79,6 @@ class Subscription(models.Model):
     provider_customer_id = models.CharField(max_length=200, blank=True)
     provider_subscription_id = models.CharField(max_length=200, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]

@@ -89,3 +89,71 @@ class TestUserModel:
         after = timezone.now()
         assert before <= user.created_at <= after
         assert before <= user.updated_at <= after
+
+
+@pytest.mark.django_db
+class TestUserSoftDelete:
+    def _make_user(self, email="softdelete@example.com"):
+        return User.objects.create_user(
+            email=email, password="pass123", role=User.Role.TRAINER
+        )
+
+    def test_delete_sets_deleted_at_and_deactivates(self):
+        user = self._make_user()
+        user.delete()
+        user.refresh_from_db()
+        assert user.deleted_at is not None
+        assert user.is_active is False
+
+    def test_restore_clears_deleted_at_and_activates(self):
+        user = self._make_user("restore@example.com")
+        user.delete()
+        user.restore()
+        user.refresh_from_db()
+        assert user.deleted_at is None
+        assert user.is_active is True
+
+    def test_is_deleted_returns_true_after_delete(self):
+        user = self._make_user("isdeleted@example.com")
+        user.delete()
+        user.refresh_from_db()
+        assert user.is_deleted is True
+
+    def test_is_deleted_returns_false_before_delete(self):
+        user = self._make_user("notdeleted@example.com")
+        assert user.is_deleted is False
+
+    def test_hard_delete_removes_from_database(self):
+        user = self._make_user("harddelete@example.com")
+        pk = user.pk
+        user.hard_delete()
+        assert not User.objects.filter(pk=pk).exists()
+
+
+@pytest.mark.django_db
+class TestUserOnboarding:
+    def _make_user(self, email="onboard@example.com"):
+        return User.objects.create_user(
+            email=email, password="pass123", role=User.Role.TRAINER
+        )
+
+    def test_onboarding_status_defaults_to_not_started(self):
+        user = self._make_user()
+        assert user.onboarding_status == User.OnboardingStatus.NOT_STARTED
+
+    def test_is_first_login_defaults_to_true(self):
+        user = self._make_user("firstlogin@example.com")
+        assert user.is_first_login is True
+
+    def test_complete_onboarding_sets_status_and_timestamp(self):
+        user = self._make_user("complete@example.com")
+        before = timezone.now()
+        user.complete_onboarding()
+        after = timezone.now()
+        user.refresh_from_db()
+        assert user.onboarding_status == User.OnboardingStatus.COMPLETED
+        assert before <= user.onboarding_completed_at <= after
+
+    def test_onboarding_completed_at_is_null_by_default(self):
+        user = self._make_user("nullonboard@example.com")
+        assert user.onboarding_completed_at is None
