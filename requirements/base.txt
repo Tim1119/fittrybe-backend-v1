@@ -1,0 +1,31 @@
+# Core
+django>=5.0
+djangorestframework
+django-cors-headers
+python-decouple
+psycopg2-binary
+pillow
+django-filter
+drf-spectacular
+
+# Auth
+djangorestframework-simplejwt
+
+# Async / Real-time
+channels
+channels-redis
+daphne
+
+# Task queue
+celery
+django-celery-beat
+django-celery-results
+redis
+
+# Email
+django-anymail[mailgun]
+
+# Utilities
+django-extensions
+django-storages
+boto3

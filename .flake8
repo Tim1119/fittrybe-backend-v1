@@ -1,0 +1,20 @@
+[flake8]
+max-line-length = 88
+exclude =
+    migrations,
+    venv,
+    .git,
+    __pycache__
+extend-ignore = E203, W503
+per-file-ignores =
+    # Django auto-generated stubs — imports used when fully implemented
+    */admin.py: F401
+    */models.py: F401
+    */tests.py: F401
+    */views.py: F401
+    # urls.py stubs intentionally import path for future use
+    */urls.py: F401
+    # migrations are auto-generated — ignore line length
+    */migrations/*.py: E501
+    # settings use wildcard imports intentionally
+    fittrybe_backend/settings/*.py: F401, F403, F405, E501

@@ -1,0 +1,16 @@
+-r base.txt
+
+# Testing
+pytest
+pytest-django
+pytest-cov
+factory-boy
+faker
+
+# Development tools
+django-debug-toolbar
+black
+flake8
+isort
+pre-commit
+ipython

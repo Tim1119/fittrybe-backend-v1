@@ -1,0 +1,46 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Django
+*.sqlite3
+media/
+staticfiles/
+local_settings.py
+
+# Environment
+.env
+!.env.example
+
+# Testing & Coverage
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+
+# Code quality
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Node
+node_modules/
+
+# Docker volumes
+postgres_data/
