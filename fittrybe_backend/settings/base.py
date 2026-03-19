@@ -6,19 +6,22 @@ Shared across all environments.
 from datetime import timedelta
 from pathlib import Path
 
-from decouple import Csv, config
+import environ
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+env = environ.Env()
+environ.Env.read_env(BASE_DIR / ".env")
+
 # ---------------------------------------------------------------------------
 # Security
 # ---------------------------------------------------------------------------
-SECRET_KEY = config("SECRET_KEY")
-DEBUG = config("DEBUG", default=False, cast=bool)
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="", cast=Csv())
+SECRET_KEY = env("SECRET_KEY")
+DEBUG = env.bool("DEBUG", default=False)
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
 # ---------------------------------------------------------------------------
 # Application definition
@@ -48,6 +51,7 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
+    "apps.core",
     "apps.accounts",
     "apps.profiles",
     "apps.clients",
@@ -104,11 +108,11 @@ ASGI_APPLICATION = "fittrybe_backend.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME"),
-        "USER": config("DB_USER"),
-        "PASSWORD": config("DB_PASSWORD"),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
+        "NAME": env("DB_NAME"),
+        "USER": env("DB_USER"),
+        "PASSWORD": env("DB_PASSWORD"),
+        "HOST": env("DB_HOST", default="localhost"),
+        "PORT": env("DB_PORT", default="5432"),
         "OPTIONS": {"connect_timeout": 10},
     }
 }
@@ -199,7 +203,7 @@ SPECTACULAR_SETTINGS = {
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
-CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
 # ---------------------------------------------------------------------------
@@ -211,8 +215,8 @@ CHANNEL_LAYERS = {
         "CONFIG": {
             "hosts": [
                 (
-                    config("REDIS_HOST", default="localhost"),
-                    config("REDIS_PORT", default=6379, cast=int),
+                    env("REDIS_HOST", default="localhost"),
+                    env.int("REDIS_PORT", default=6379),
                 )
             ],
         },
@@ -222,7 +226,7 @@ CHANNEL_LAYERS = {
 # ---------------------------------------------------------------------------
 # Celery
 # ---------------------------------------------------------------------------
-CELERY_BROKER_URL = config("REDIS_URL", default="redis://localhost:6379/0")
+CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "django-cache"
 CELERY_ACCEPT_CONTENT = ["application/json"]
@@ -236,10 +240,10 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 # ---------------------------------------------------------------------------
 EMAIL_BACKEND = "anymail.backends.mailgun.EmailBackend"
 ANYMAIL = {
-    "MAILGUN_API_KEY": config("MAILGUN_API_KEY", default=""),
-    "MAILGUN_SENDER_DOMAIN": config("MAILGUN_SENDER_DOMAIN", default=""),
+    "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=""),
+    "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default=""),
 }
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@fittrybe.com")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@fittrybe.com")
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 # ---------------------------------------------------------------------------
@@ -260,4 +264,4 @@ RATELIMIT_ENABLE = True
 # ---------------------------------------------------------------------------
 # Frontend URL (for email links)
 # ---------------------------------------------------------------------------
-FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
