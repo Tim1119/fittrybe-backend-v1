@@ -2,7 +2,13 @@
 Fit Trybe Backend — Production Settings
 """
 
+import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
+from sentry_sdk.integrations.django import DjangoIntegration
+from sentry_sdk.integrations.redis import RedisIntegration
+
 from .base import *  # noqa: F401, F403
+from .base import env
 
 DEBUG = False
 
@@ -25,17 +31,30 @@ MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")  # noqa: F405
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # ---------------------------------------------------------------------------
-# Logging — structured, WARNING and above
+# Sentry — error tracking and performance monitoring
+# ---------------------------------------------------------------------------
+sentry_sdk.init(
+    dsn=env("SENTRY_DSN", default=""),
+    integrations=[
+        DjangoIntegration(),
+        CeleryIntegration(),
+        RedisIntegration(),
+    ],
+    traces_sample_rate=0.1,
+    send_default_pii=False,
+    environment="production",
+)
+
+# ---------------------------------------------------------------------------
+# Logging — structured JSON via python-json-logger
 # ---------------------------------------------------------------------------
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
         "json": {
-            "format": (
-                '{"time": "%(asctime)s", "level": "%(levelname)s",'
-                ' "logger": "%(name)s", "message": "%(message)s"}'
-            ),
+            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "format": "%(asctime)s %(name)s %(levelname)s %(message)s %(request_id)s",
         },
     },
     "handlers": {
@@ -49,15 +68,7 @@ LOGGING = {
         "level": "WARNING",
     },
     "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": "WARNING",
-            "propagate": False,
-        },
-        "apps": {
-            "handlers": ["console"],
-            "level": "WARNING",
-            "propagate": False,
-        },
+        "django": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "apps": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
