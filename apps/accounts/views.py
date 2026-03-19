@@ -22,8 +22,6 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.accounts.emails import (
     account_token_generator,
     send_password_changed_email,
-    send_password_reset_email,
-    send_verification_email,
     send_welcome_email,
 )
 from apps.accounts.models import User
@@ -34,6 +32,10 @@ from apps.accounts.serializers import (
     RegisterSerializer,
     ResetPasswordSerializer,
     UserProfileSerializer,
+)
+from apps.accounts.tasks import (
+    send_password_reset_email_task,
+    send_verification_email_task,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,10 +76,7 @@ class RegisterView(APIView):
 
         user = serializer.save()
 
-        try:
-            send_verification_email(user)
-        except Exception:
-            logger.exception("Failed to send verification email to %s", user.email)
+        send_verification_email_task.delay(str(user.id))
 
         return Response(
             {
@@ -249,11 +248,9 @@ class ForgotPasswordView(APIView):
             email = serializer.validated_data["email"]
             try:
                 user = User.objects.get(email=email)
-                send_password_reset_email(user)
+                send_password_reset_email_task.delay(str(user.id))
             except User.DoesNotExist:
                 pass
-            except Exception:
-                logger.exception("Failed to send password reset email to %s", email)
 
         return Response(
             {
