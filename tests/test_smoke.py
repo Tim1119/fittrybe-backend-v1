@@ -135,5 +135,5 @@ def test_chat_routing_urlpatterns():
 def test_user_model_str():
     from apps.accounts.models import User
 
-    u = User(email="test@fittrybe.com", username="test")
+    u = User(email="test@fittrybe.com")
     assert str(u) == "test@fittrybe.com"
