@@ -1,18 +1,49 @@
 """
 Accounts models.
-Stub — full User model implementation added in Phase 2.
-The custom User model must be declared here so Django can resolve AUTH_USER_MODEL.
 """
 
-from django.contrib.auth.models import AbstractUser
+import uuid
+
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
 
+class UserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("Email is required")
+        email = self.normalize_email(email)
+        extra_fields.setdefault("is_active", True)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        return self.create_user(email, password, **extra_fields)
+
+
 class User(AbstractUser):
-    """
-    Custom User model for Fit Trybe.
-    Extends AbstractUser — additional fields added in Phase 2.
-    """
+    class Role(models.TextChoices):
+        TRAINER = "trainer", "Trainer"
+        GYM = "gym", "Gym"
+        CLIENT = "client", "Client"
+
+    username = None
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True)
+    role = models.CharField(max_length=10, choices=Role.choices)
+    is_email_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = []
+
+    objects = UserManager()
 
     class Meta:
         verbose_name = "User"
