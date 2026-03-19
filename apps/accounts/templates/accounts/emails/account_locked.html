@@ -1,0 +1,50 @@
+{% extends "accounts/emails/base_email.html" %}
+
+{% block title %}Fit Trybe Account Temporarily Locked{% endblock %}
+
+{% block banner %}
+<tr>
+  <td style="background-color:#1A1A2E;padding:32px 40px;text-align:center;">
+    <p style="font-size:32px;margin:0 0 8px;">&#9888;&#65039;</p>
+    <h1 style="color:#E8490F;font-size:22px;margin:0;font-weight:bold;">
+      Account Temporarily Locked
+    </h1>
+  </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<h2 style="color:#1A1A2E;font-size:20px;margin:0 0 16px;">
+  Too many failed login attempts
+</h2>
+<p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 20px;">
+  Your Fit Trybe account (<strong>{{ user_email }}</strong>) has been
+  temporarily locked after 3 failed login attempts.
+</p>
+<div style="border-left:4px solid #E8490F;padding:12px 16px;background-color:#FFF7F5;
+            border-radius:0 4px 4px 0;margin:0 0 8px;">
+  <p style="color:#374151;font-size:13px;margin:0;line-height:1.5;">
+    Your account will automatically unlock in <strong>15 minutes</strong>.
+    If this was not you, we recommend resetting your password immediately.
+  </p>
+</div>
+{% endblock %}
+
+{% block cta %}
+<tr>
+  <td style="padding:0 40px 32px;text-align:center;">
+    <a href="{{ reset_url }}"
+       style="display:inline-block;background-color:#E8490F;color:#FFFFFF;
+              text-decoration:none;padding:16px 40px;border-radius:8px;
+              font-size:16px;font-weight:bold;letter-spacing:0.5px;">
+      Reset My Password
+    </a>
+    <p style="margin:16px 0 0;">
+      <a href="mailto:support@fittrybe.com"
+         style="color:#6B7280;font-size:13px;text-decoration:underline;">
+        Contact Support
+      </a>
+    </p>
+  </td>
+</tr>
+{% endblock %}

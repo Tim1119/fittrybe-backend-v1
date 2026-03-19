@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Fit Trybe{% endblock %}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F5F5F5;font-family:Arial,Helvetica,sans-serif;">
+
+  <!-- Outer wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0"
+         style="background-color:#F5F5F5;padding:40px 0;">
+    <tr><td align="center">
+
+      <!-- Email card -->
+      <table width="600" cellpadding="0" cellspacing="0"
+             style="background:#FFFFFF;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
+
+        <!-- Header with logo -->
+        <tr>
+          <td style="background-color:#1A1A2E;padding:28px 40px;text-align:center;">
+            <img src="{{ logo_url }}" alt="Fit Trybe"
+                 width="160" style="display:block;margin:0 auto;">
+          </td>
+        </tr>
+
+        <!-- Orange accent bar -->
+        <tr>
+          <td style="background-color:#E8490F;height:4px;font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+
+        <!-- Banner image slot -->
+        {% block banner %}{% endblock %}
+
+        <!-- Body content -->
+        <tr>
+          <td style="padding:40px 40px 24px;">
+            {% block content %}{% endblock %}
+          </td>
+        </tr>
+
+        <!-- CTA button slot -->
+        {% block cta %}{% endblock %}
+
+        <!-- Footer -->
+        <tr>
+          <td style="background-color:#1A1A2E;padding:24px 40px;text-align:center;">
+            <p style="color:#9CA3AF;font-size:12px;margin:0 0 8px;">
+              &copy; 2025 Fit Trybe. All rights reserved.
+            </p>
+            <p style="color:#6B7280;font-size:11px;margin:0;">
+              You received this email because you signed up for Fit Trybe.
+              If you did not request this, please ignore this email.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+      <!-- End email card -->
+
+    </td></tr>
+  </table>
+
+</body>
+</html>

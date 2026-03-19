@@ -1,0 +1,47 @@
+{% extends "accounts/emails/base_email.html" %}
+
+{% block title %}Verify Your Fit Trybe Account{% endblock %}
+
+{% block banner %}
+<tr>
+  <td style="background-color:#1A1A2E;padding:32px 40px;text-align:center;">
+    <h1 style="color:#E8490F;font-size:26px;margin:0 0 8px;font-weight:bold;">
+      Verify Your Account
+    </h1>
+    <p style="color:#9CA3AF;font-size:14px;margin:0;">You're almost there!</p>
+  </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<h2 style="color:#1A1A2E;font-size:20px;margin:0 0 16px;">
+  Hello {{ user_name }},
+</h2>
+<p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">
+  Thank you for joining Fit Trybe as a <strong>{{ user_role|title }}</strong>.
+  To activate your account and start your fitness journey, please verify
+  your email address.
+</p>
+<p style="color:#6B7280;font-size:13px;margin:0;">
+  This link expires in <strong>24 hours</strong>.
+</p>
+{% endblock %}
+
+{% block cta %}
+<tr>
+  <td style="padding:0 40px 40px;text-align:center;">
+    <a href="{{ verification_url }}"
+       style="display:inline-block;background-color:#E8490F;color:#FFFFFF;
+              text-decoration:none;padding:16px 40px;border-radius:8px;
+              font-size:16px;font-weight:bold;letter-spacing:0.5px;">
+      Verify My Email
+    </a>
+    <p style="color:#9CA3AF;font-size:12px;margin:16px 0 0;">
+      Or copy this link:<br>
+      <span style="color:#E8490F;word-break:break-all;">
+        {{ verification_url }}
+      </span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

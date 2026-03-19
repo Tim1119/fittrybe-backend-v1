@@ -29,3 +29,8 @@ django-anymail[mailgun]
 django-extensions
 django-storages
 boto3
+
+# Security & Rate limiting
+zxcvbn
+django-ratelimit
+django-axes

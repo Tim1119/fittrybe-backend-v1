@@ -44,6 +44,7 @@ THIRD_PARTY_APPS = [
     "channels",
     "anymail",
     "django_extensions",
+    "axes",
 ]
 
 LOCAL_APPS = [
@@ -71,6 +72,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "axes.middleware.AxesMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -120,9 +122,17 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
     },
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 8},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
 # ---------------------------------------------------------------------------
@@ -231,3 +241,23 @@ ANYMAIL = {
 }
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@fittrybe.com")
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# ---------------------------------------------------------------------------
+# Axes — account lockout
+# ---------------------------------------------------------------------------
+AXES_FAILURE_LIMIT = 3
+AXES_COOLOFF_TIME = 0.25  # 15 minutes
+AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True
+AXES_RESET_ON_SUCCESS = True
+AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+RATELIMIT_USE_CACHE = "default"
+RATELIMIT_ENABLE = True
+
+# ---------------------------------------------------------------------------
+# Frontend URL (for email links)
+# ---------------------------------------------------------------------------
+FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
