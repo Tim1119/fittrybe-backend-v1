@@ -30,6 +30,10 @@ django-extensions
 django-storages
 boto3
 
+# Payments
+stripe
+requests
+
 # Security & Rate limiting
 zxcvbn
 django-ratelimit

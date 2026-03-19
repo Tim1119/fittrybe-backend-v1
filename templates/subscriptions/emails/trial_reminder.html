@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Your Fit Trybe Trial is Ending Soon</title>
+</head>
+<body style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #E85D04;">Your Free Trial Ends in {{ days_remaining }} Day{{ days_remaining|pluralize }}</h2>
+  <p>Hi {{ user.first_name|default:user.email }},</p>
+  <p>
+    Your Fit Trybe <strong>{{ plan_name }}</strong> trial ends on
+    <strong>{{ trial_end }}</strong>.
+  </p>
+  <p>
+    To keep your access and continue building your fitness business, upgrade to a paid plan today.
+  </p>
+  <p style="text-align: center; margin: 30px 0;">
+    <a href="{{ upgrade_url }}"
+       style="background-color: #E85D04; color: white; padding: 14px 28px;
+              text-decoration: none; border-radius: 6px; font-weight: bold;">
+      Upgrade Now
+    </a>
+  </p>
+  <p style="color: #666; font-size: 14px;">
+    If you have any questions, reply to this email and we'll be happy to help.
+  </p>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px; text-align: center;">
+    Fit Trybe — The Fitness Lifestyle Hub
+  </p>
+</body>
+</html>

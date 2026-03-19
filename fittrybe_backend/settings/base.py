@@ -72,6 +72,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "apps.core.middleware.RequestIDMiddleware",
+    "apps.subscriptions.middleware.SubscriptionGateMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -267,6 +268,32 @@ RATELIMIT_ENABLE = True
 # Frontend URL (for email links)
 # ---------------------------------------------------------------------------
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
+
+# ---------------------------------------------------------------------------
+# Payment gateways
+# ---------------------------------------------------------------------------
+PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")
+PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY", default="")
+STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
+STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
+STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
+PAYSTACK_WEBHOOK_SECRET = env("PAYSTACK_WEBHOOK_SECRET", default="")
+
+# ---------------------------------------------------------------------------
+# Celery Beat — scheduled tasks
+# ---------------------------------------------------------------------------
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BEAT_SCHEDULE = {
+    "check-trial-expirations": {
+        "task": "apps.subscriptions.tasks.check_trial_expirations",
+        "schedule": crontab(minute="0"),
+    },
+    "check-grace-period-expirations": {
+        "task": "apps.subscriptions.tasks.check_grace_period_expirations",
+        "schedule": crontab(minute="30"),
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Environment validation

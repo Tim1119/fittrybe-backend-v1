@@ -146,9 +146,9 @@ class TestLoginView:
             format="json",
         )
         assert resp.status_code == status.HTTP_200_OK
-        assert "access" in resp.data
-        assert "refresh" in resp.data
-        assert resp.data["email"] == user.email
+        assert "access" in resp.data["data"]
+        assert "refresh" in resp.data["data"]
+        assert resp.data["data"]["email"] == user.email
 
     def test_wrong_password_returns_401(self, api_client):
         user = UserFactory()
@@ -281,8 +281,8 @@ class TestMeView:
     def test_authenticated_returns_200_with_user_data(self, auth_client):
         resp = auth_client.get(self.URL)
         assert resp.status_code == status.HTTP_200_OK
-        assert "email" in resp.data
-        assert "role" in resp.data
+        assert "email" in resp.data["data"]
+        assert "role" in resp.data["data"]
 
     def test_unauthenticated_returns_401(self, api_client):
         resp = api_client.get(self.URL)

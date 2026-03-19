@@ -37,6 +37,8 @@ from apps.accounts.tasks import (
     send_password_reset_email_task,
     send_verification_email_task,
 )
+from apps.core.error_codes import ErrorCode
+from apps.core.responses import APIResponse
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,28 @@ def _decode_uid(uid):
     """Decode a base64-encoded UID string. Returns the decoded string or None."""
     try:
         return force_str(urlsafe_base64_decode(uid))
+    except Exception:
+        return None
+
+
+def _get_subscription_data(user):
+    if user.role == "client":
+        return None
+    try:
+        sub = user.subscription
+        return {
+            "status": sub.status,
+            "plan": sub.plan.plan,
+            "is_trial": sub.is_trial_active(),
+            "days_remaining": sub.days_remaining_in_trial(),
+            "trial_ends_at": (
+                sub.trial_end.isoformat() if sub.status == "trial" else None
+            ),
+            "current_period_end": (
+                sub.current_period_end.isoformat() if sub.current_period_end else None
+            ),
+            "is_access_allowed": sub.is_access_allowed(),
+        }
     except Exception:
         return None
 
@@ -135,6 +159,16 @@ class VerifyEmailView(APIView):
         user.is_email_verified = True
         user.save(update_fields=["is_active", "is_email_verified"])
 
+        if user.role in ("trainer", "gym"):
+            try:
+                from apps.subscriptions.utils import create_trial_subscription
+
+                create_trial_subscription(user)
+            except Exception:
+                logger.exception(
+                    "Failed to create trial subscription for %s", user.email
+                )
+
         try:
             send_welcome_email(user)
         except Exception:
@@ -186,7 +220,26 @@ class LoginView(TokenObtainPairView):
         except User.DoesNotExist:
             pass
 
-        return super().post(request, *args, **kwargs)
+        response = super().post(request, *args, **kwargs)
+
+        if response.status_code == status.HTTP_200_OK:
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return response
+
+            return APIResponse.success(
+                data={
+                    "access": response.data.get("access"),
+                    "refresh": response.data.get("refresh"),
+                    "email": user.email,
+                    "role": user.role,
+                    "subscription": _get_subscription_data(user),
+                },
+                message="Login successful.",
+            )
+
+        return response
 
 
 @extend_schema(
@@ -377,4 +430,10 @@ class MeView(APIView):
 
     def get(self, request):
         serializer = UserProfileSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return APIResponse.success(
+            data={
+                **serializer.data,
+                "subscription": _get_subscription_data(request.user),
+            },
+            message="Profile retrieved successfully.",
+        )
