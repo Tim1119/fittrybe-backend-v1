@@ -9,6 +9,8 @@ from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django_ratelimit.decorators import ratelimit
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -45,6 +47,20 @@ def _decode_uid(uid):
         return None
 
 
+@extend_schema(
+    summary="Register a new user",
+    description=(
+        "Create a new trainer, gym, or client account. "
+        "A verification email will be sent."
+    ),
+    request=RegisterSerializer,
+    responses={
+        201: OpenApiResponse(description="Registration successful"),
+        400: OpenApiResponse(description="Validation error"),
+    },
+    tags=["Authentication"],
+    auth=[],
+)
 @method_decorator(
     ratelimit(key="ip", rate="5/h", method="POST", block=True), name="post"
 )
@@ -76,6 +92,18 @@ class RegisterView(APIView):
         )
 
 
+@extend_schema(
+    summary="Verify email address",
+    description=(
+        "Verify a user's email using the uid and token from the verification email."
+    ),
+    responses={
+        200: OpenApiResponse(description="Email verified successfully"),
+        400: OpenApiResponse(description="Invalid or expired token"),
+    },
+    tags=["Authentication"],
+    auth=[],
+)
 class VerifyEmailView(APIView):
     permission_classes = [AllowAny]
 
@@ -119,6 +147,20 @@ class VerifyEmailView(APIView):
         )
 
 
+@extend_schema(
+    summary="Login",
+    description=(
+        "Authenticate with email and password. Returns JWT access and refresh tokens."
+    ),
+    request=CustomTokenObtainPairSerializer,
+    responses={
+        200: OpenApiResponse(description="Login successful with tokens"),
+        400: OpenApiResponse(description="Invalid credentials"),
+        403: OpenApiResponse(description="Account not verified"),
+    },
+    tags=["Authentication"],
+    auth=[],
+)
 @method_decorator(
     ratelimit(key="ip", rate="10/m", method="POST", block=True), name="post"
 )
@@ -148,6 +190,18 @@ class LoginView(TokenObtainPairView):
         return super().post(request, *args, **kwargs)
 
 
+@extend_schema(
+    summary="Logout",
+    description="Blacklist the refresh token to log out.",
+    request=inline_serializer(
+        name="LogoutRequest", fields={"refresh": drf_serializers.CharField()}
+    ),
+    responses={
+        200: OpenApiResponse(description="Logged out successfully"),
+        400: OpenApiResponse(description="Invalid token"),
+    },
+    tags=["Authentication"],
+)
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -171,6 +225,18 @@ class LogoutView(APIView):
         )
 
 
+@extend_schema(
+    summary="Forgot password",
+    description=(
+        "Send a password reset email. Always returns 200 to prevent email enumeration."
+    ),
+    request=ForgotPasswordSerializer,
+    responses={
+        200: OpenApiResponse(description="Reset email sent if account exists"),
+    },
+    tags=["Authentication"],
+    auth=[],
+)
 @method_decorator(
     ratelimit(key="ip", rate="3/h", method="POST", block=True), name="post"
 )
@@ -200,6 +266,17 @@ class ForgotPasswordView(APIView):
         )
 
 
+@extend_schema(
+    summary="Reset password",
+    description="Reset password using uid and token from the reset email.",
+    request=ResetPasswordSerializer,
+    responses={
+        200: OpenApiResponse(description="Password reset successful"),
+        400: OpenApiResponse(description="Invalid or expired token"),
+    },
+    tags=["Authentication"],
+    auth=[],
+)
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
 
@@ -250,6 +327,16 @@ class ResetPasswordView(APIView):
         )
 
 
+@extend_schema(
+    summary="Change password",
+    description="Change password for authenticated user.",
+    request=ChangePasswordSerializer,
+    responses={
+        200: OpenApiResponse(description="Password changed successfully"),
+        400: OpenApiResponse(description="Invalid old password"),
+    },
+    tags=["Authentication"],
+)
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -280,6 +367,14 @@ class ChangePasswordView(APIView):
         )
 
 
+@extend_schema(
+    summary="Get current user",
+    description="Returns the authenticated user's profile.",
+    responses={
+        200: UserProfileSerializer,
+    },
+    tags=["Authentication"],
+)
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
