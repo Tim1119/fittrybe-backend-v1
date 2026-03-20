@@ -21,7 +21,7 @@ EXEMPT_PATHS = [
     "/api/schema/",
     "/api/redoc/",
     "/admin/",
-    "/api/health/",
+    "/api/v1/health/",
 ]
 
 

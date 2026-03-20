@@ -7,7 +7,8 @@ import logging
 from datetime import timedelta
 
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
@@ -32,8 +33,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 @extend_schema(
     summary="List subscription plans",
-    description="Returns all active subscription plans with pricing and features.",
-    responses={200: PlanConfigSerializer(many=True)},
+    description=(
+        "Returns all active subscription plans with pricing in NGN and USD, "
+        "trial duration, grace period, and feature lists. "
+        "Public endpoint — no authentication required."
+    ),
+    responses={
+        200: OpenApiResponse(
+            description="List of active plans with pricing and feature details"
+        ),
+    },
     tags=["Subscriptions"],
     auth=[],
 )
@@ -54,8 +63,20 @@ class PlansView(APIView):
 # ---------------------------------------------------------------------------
 @extend_schema(
     summary="Get subscription status",
-    description="Returns the authenticated trainer or gym's current subscription.",
-    responses={200: SubscriptionSerializer},
+    description=(
+        "Returns the current subscription record for the authenticated trainer or gym, "
+        "including status (trial, active, grace, locked, cancelled), "
+        "trial end date, current period dates, and provider details. "
+        "Only accessible to trainer and gym roles."
+    ),
+    responses={
+        200: OpenApiResponse(
+            description="Subscription record with status and period details"
+        ),
+        401: OpenApiResponse(description="Not authenticated"),
+        403: OpenApiResponse(description="Client accounts do not have subscriptions"),
+        404: OpenApiResponse(description="No subscription found for this user"),
+    },
     tags=["Subscriptions"],
 )
 class SubscriptionStatusView(APIView):
@@ -82,7 +103,21 @@ class SubscriptionStatusView(APIView):
 # ---------------------------------------------------------------------------
 @extend_schema(
     summary="Initialize Paystack checkout",
-    description="Initializes a Paystack transaction and returns an authorization URL.",
+    description=(
+        "Initializes a Paystack transaction for the authenticated trainer or gym. "
+        "Plan and amount are determined from the user's role. "
+        "Returns an authorization URL to redirect to Paystack's payment page."
+    ),
+    request=inline_serializer(name="PaystackCheckoutRequest", fields={}),
+    responses={
+        200: OpenApiResponse(
+            description="Transaction initialized — authorization_url and reference"
+        ),
+        401: OpenApiResponse(description="Not authenticated"),
+        403: OpenApiResponse(description="Only trainer and gym accounts can subscribe"),
+        404: OpenApiResponse(description="No active plan configured for this role"),
+        502: OpenApiResponse(description="Paystack API error"),
+    },
     tags=["Subscriptions"],
 )
 class PaystackCheckoutView(APIView):
@@ -127,7 +162,28 @@ class PaystackCheckoutView(APIView):
 # ---------------------------------------------------------------------------
 @extend_schema(
     summary="Initialize Stripe checkout",
-    description="Creates a Stripe checkout session and returns the redirect URL.",
+    description=(
+        "Creates a Stripe checkout session for the authenticated trainer or gym. "
+        "Requires a Stripe price_id for the chosen plan. "
+        "Returns a checkout_url to redirect the user to Stripe's hosted payment page."
+    ),
+    request=inline_serializer(
+        name="StripeCheckoutRequest",
+        fields={
+            "price_id": drf_serializers.CharField(
+                help_text="Stripe price ID, e.g. price_1ABC..."
+            )
+        },
+    ),
+    responses={
+        200: OpenApiResponse(
+            description="Checkout session created — returns checkout_url"
+        ),
+        400: OpenApiResponse(description="price_id is required"),
+        401: OpenApiResponse(description="Not authenticated"),
+        403: OpenApiResponse(description="Only trainer and gym accounts can subscribe"),
+        502: OpenApiResponse(description="Stripe API error"),
+    },
     tags=["Subscriptions"],
 )
 class StripeCheckoutView(APIView):
@@ -169,7 +225,22 @@ class StripeCheckoutView(APIView):
 # ---------------------------------------------------------------------------
 # Paystack webhook
 # ---------------------------------------------------------------------------
-@extend_schema(exclude=True)
+@extend_schema(
+    summary="Paystack webhook receiver",
+    description=(
+        "Receives and processes Paystack webhook events. "
+        "Verifies the HMAC-SHA512 signature before handling. "
+        "Handles: charge.success, subscription.disable, invoice.payment_failed. "
+        "This endpoint is called by Paystack servers — do not call it directly."
+    ),
+    responses={
+        200: OpenApiResponse(description="Webhook received and queued for processing"),
+        400: OpenApiResponse(description="Invalid signature or malformed payload"),
+    },
+    tags=["Subscriptions"],
+    auth=[],
+    exclude=True,
+)
 class PaystackWebhookView(APIView):
     permission_classes = [AllowAny]
 
@@ -260,7 +331,23 @@ class PaystackWebhookView(APIView):
 # ---------------------------------------------------------------------------
 # Stripe webhook
 # ---------------------------------------------------------------------------
-@extend_schema(exclude=True)
+@extend_schema(
+    summary="Stripe webhook receiver",
+    description=(
+        "Receives and processes Stripe webhook events. "
+        "Verifies the Stripe-Signature header before handling. "
+        "Handles: checkout.session.completed, invoice.payment_succeeded, "
+        "invoice.payment_failed, customer.subscription.deleted. "
+        "This endpoint is called by Stripe servers — do not call it directly."
+    ),
+    responses={
+        200: OpenApiResponse(description="Webhook received and queued for processing"),
+        400: OpenApiResponse(description="Invalid signature or malformed payload"),
+    },
+    tags=["Subscriptions"],
+    auth=[],
+    exclude=True,
+)
 class StripeWebhookView(APIView):
     permission_classes = [AllowAny]
 
@@ -362,7 +449,20 @@ class StripeWebhookView(APIView):
 # ---------------------------------------------------------------------------
 @extend_schema(
     summary="Cancel subscription",
-    description="Cancels the current subscription.",
+    description=(
+        "Cancel the current subscription for the authenticated trainer or gym. "
+        "Sets status to 'cancelled' and records the cancellation timestamp. "
+        "Access is retained until the end of the current billing period."
+    ),
+    request=inline_serializer(name="CancelSubscriptionRequest", fields={}),
+    responses={
+        200: OpenApiResponse(
+            description="Subscription cancelled — returns cancelled_at timestamp"
+        ),
+        401: OpenApiResponse(description="Not authenticated"),
+        403: OpenApiResponse(description="Only trainer and gym accounts can cancel"),
+        404: OpenApiResponse(description="No active subscription found"),
+    },
     tags=["Subscriptions"],
 )
 class CancelSubscriptionView(APIView):
@@ -389,7 +489,20 @@ class CancelSubscriptionView(APIView):
 # ---------------------------------------------------------------------------
 @extend_schema(
     summary="Billing history",
-    description="Returns a paginated list of payment records.",
+    description=(
+        "Returns a paginated list of payment records for the authenticated trainer "
+        "or gym. Each record includes amount, currency, provider, status, paid_at. "
+        "Returns an empty list if no subscription or payments exist."
+    ),
+    responses={
+        200: OpenApiResponse(
+            description="Paginated payment record list (empty list if no history)"
+        ),
+        401: OpenApiResponse(description="Not authenticated"),
+        403: OpenApiResponse(
+            description="Only trainer and gym accounts have billing history"
+        ),
+    },
     tags=["Subscriptions"],
 )
 class BillingHistoryView(APIView):

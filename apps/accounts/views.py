@@ -9,7 +9,12 @@ from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django_ratelimit.decorators import ratelimit
-from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -18,6 +23,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenRefreshView as _TokenRefreshView
 
 from apps.accounts.emails import (
     account_token_generator,
@@ -77,12 +83,18 @@ def _get_subscription_data(user):
     summary="Register a new user",
     description=(
         "Create a new trainer, gym, or client account. "
-        "A verification email will be sent."
+        "Sends a verification email upon success. "
+        "Rate limited to 5 registrations per hour per IP."
     ),
     request=RegisterSerializer,
     responses={
-        201: OpenApiResponse(description="Registration successful"),
-        400: OpenApiResponse(description="Validation error"),
+        201: OpenApiResponse(
+            description="Registration successful — verification email sent"
+        ),
+        400: OpenApiResponse(
+            description="Validation error — invalid or duplicate data"
+        ),
+        429: OpenApiResponse(description="Rate limit exceeded"),
     },
     tags=["Authentication"],
     auth=[],
@@ -118,11 +130,29 @@ class RegisterView(APIView):
 @extend_schema(
     summary="Verify email address",
     description=(
-        "Verify a user's email using the uid and token from the verification email."
+        "Confirm ownership of an email address using the uid and token "
+        "included in the verification link sent after registration. "
+        "Activates the account and starts the subscription trial for trainers and gyms."
     ),
+    parameters=[
+        OpenApiParameter(
+            name="uid",
+            location=OpenApiParameter.QUERY,
+            description="Base64-encoded user ID from the verification email",
+            required=True,
+            type=str,
+        ),
+        OpenApiParameter(
+            name="token",
+            location=OpenApiParameter.QUERY,
+            description="Verification token from the email link",
+            required=True,
+            type=str,
+        ),
+    ],
     responses={
-        200: OpenApiResponse(description="Email verified successfully"),
-        400: OpenApiResponse(description="Invalid or expired token"),
+        200: OpenApiResponse(description="Email verified — account activated"),
+        400: OpenApiResponse(description="Invalid uid, unknown user, or expired token"),
     },
     tags=["Authentication"],
     auth=[],
@@ -183,13 +213,21 @@ class VerifyEmailView(APIView):
 @extend_schema(
     summary="Login",
     description=(
-        "Authenticate with email and password. Returns JWT access and refresh tokens."
+        "Authenticate with email and password. Returns JWT access and refresh tokens "
+        "alongside the user's role, subscription status, and onboarding state. "
+        "Sets is_first_login=False after the first successful login. "
+        "Rate limited to 10 requests per minute per IP."
     ),
     request=CustomTokenObtainPairSerializer,
     responses={
-        200: OpenApiResponse(description="Login successful with tokens"),
-        400: OpenApiResponse(description="Invalid credentials"),
-        403: OpenApiResponse(description="Account not verified"),
+        200: OpenApiResponse(
+            description="Login successful — access/refresh tokens and user context"
+        ),
+        401: OpenApiResponse(description="Invalid email or password"),
+        403: OpenApiResponse(
+            description="Email not verified — check inbox for verification link"
+        ),
+        429: OpenApiResponse(description="Rate limit exceeded"),
     },
     tags=["Authentication"],
     auth=[],
@@ -255,13 +293,20 @@ class LoginView(TokenObtainPairView):
 
 @extend_schema(
     summary="Logout",
-    description="Blacklist the refresh token to log out.",
+    description=(
+        "Blacklist the provided refresh token, invalidating the session. "
+        "The client should also discard the access token locally. "
+        "Requires a valid Bearer access token in the Authorization header."
+    ),
     request=inline_serializer(
         name="LogoutRequest", fields={"refresh": drf_serializers.CharField()}
     ),
     responses={
         200: OpenApiResponse(description="Logged out successfully"),
-        400: OpenApiResponse(description="Invalid token"),
+        400: OpenApiResponse(
+            description="Refresh token missing or already invalidated"
+        ),
+        401: OpenApiResponse(description="Access token missing or expired"),
     },
     tags=["Authentication"],
 )
@@ -291,11 +336,17 @@ class LogoutView(APIView):
 @extend_schema(
     summary="Forgot password",
     description=(
-        "Send a password reset email. Always returns 200 to prevent email enumeration."
+        "Request a password reset link by email. "
+        "Always returns 200 regardless of whether the email exists, "
+        "to prevent account enumeration attacks. "
+        "Rate limited to 3 requests per hour per IP."
     ),
     request=ForgotPasswordSerializer,
     responses={
-        200: OpenApiResponse(description="Reset email sent if account exists"),
+        200: OpenApiResponse(
+            description="Request accepted — reset email sent if the account exists"
+        ),
+        429: OpenApiResponse(description="Rate limit exceeded"),
     },
     tags=["Authentication"],
     auth=[],
@@ -329,11 +380,19 @@ class ForgotPasswordView(APIView):
 
 @extend_schema(
     summary="Reset password",
-    description="Reset password using uid and token from the reset email.",
+    description=(
+        "Set a new password using the uid and token from the password reset email. "
+        "The token is single-use and expires after a short window. "
+        "Sends a confirmation email on success."
+    ),
     request=ResetPasswordSerializer,
     responses={
-        200: OpenApiResponse(description="Password reset successful"),
-        400: OpenApiResponse(description="Invalid or expired token"),
+        200: OpenApiResponse(
+            description="Password reset — user may now log in with new password"
+        ),
+        400: OpenApiResponse(
+            description="Invalid uid, unknown user, expired token, or weak password"
+        ),
     },
     tags=["Authentication"],
     auth=[],
@@ -390,11 +449,18 @@ class ResetPasswordView(APIView):
 
 @extend_schema(
     summary="Change password",
-    description="Change password for authenticated user.",
+    description=(
+        "Change the password for the currently authenticated user. "
+        "Requires the correct current password. "
+        "Sends a security notification email after a successful change."
+    ),
     request=ChangePasswordSerializer,
     responses={
         200: OpenApiResponse(description="Password changed successfully"),
-        400: OpenApiResponse(description="Invalid old password"),
+        400: OpenApiResponse(
+            description="Current password incorrect or new password too weak"
+        ),
+        401: OpenApiResponse(description="Not authenticated"),
     },
     tags=["Authentication"],
 )
@@ -429,10 +495,17 @@ class ChangePasswordView(APIView):
 
 
 @extend_schema(
-    summary="Get current user",
-    description="Returns the authenticated user's profile.",
+    summary="Get current user profile",
+    description=(
+        "Returns the full profile of the currently authenticated user, "
+        "including role, email verification status, subscription state, "
+        "and onboarding progress."
+    ),
     responses={
-        200: UserProfileSerializer,
+        200: OpenApiResponse(
+            description="User profile with subscription and onboarding data"
+        ),
+        401: OpenApiResponse(description="Not authenticated"),
     },
     tags=["Authentication"],
 )
@@ -455,3 +528,17 @@ class MeView(APIView):
             },
             message="Profile retrieved successfully.",
         )
+
+
+@extend_schema(
+    summary="Refresh access token",
+    description=(
+        "Exchange a valid refresh token for a new access token. "
+        "If ROTATE_REFRESH_TOKENS is enabled a new refresh token is also returned "
+        "and the old one is blacklisted."
+    ),
+    tags=["Authentication"],
+    auth=[],
+)
+class TokenRefreshView(_TokenRefreshView):
+    pass

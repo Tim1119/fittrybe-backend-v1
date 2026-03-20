@@ -197,9 +197,73 @@ SIMPLE_JWT = {
 # ---------------------------------------------------------------------------
 SPECTACULAR_SETTINGS = {
     "TITLE": "Fit Trybe API",
-    "DESCRIPTION": "Fit Trybe — The Fitness Lifestyle Hub. Backend API.",
+    "DESCRIPTION": """
+Fit Trybe — The Fitness Lifestyle Hub Backend API.
+
+## Authentication
+Use JWT Bearer tokens. Obtain tokens via /api/v1/auth/login/
+Include in header: `Authorization: Bearer <access_token>`
+
+## Response Format
+All endpoints return a consistent envelope:
+```json
+{
+  "status": "success | error",
+  "message": "Human readable message",
+  "data": {} or [] or null,
+  "errors": {},
+  "code": "ERROR_CODE",
+  "meta": {
+    "timestamp": "2025-03-19T10:00:00Z",
+    "version": "v1",
+    "pagination": {}
+  }
+}
+```
+
+## Error Codes
+- `VALIDATION_ERROR` — invalid input
+- `INVALID_CREDENTIALS` — wrong email/password
+- `ACCOUNT_NOT_VERIFIED` — email not verified
+- `ACCOUNT_LOCKED` — too many failed attempts
+- `TOKEN_INVALID` — expired or invalid token
+- `PERMISSION_DENIED` — insufficient permissions
+- `NOT_FOUND` — resource not found
+- `RATE_LIMIT_EXCEEDED` — too many requests
+- `SUBSCRIPTION_EXPIRED` — subscription locked
+    """,
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SORT_OPERATIONS": False,
+    "TAGS": [
+        {
+            "name": "Authentication",
+            "description": (
+                "Registration, login, email verification, password management"
+            ),
+        },
+        {
+            "name": "Subscriptions",
+            "description": "Plans, billing, Paystack and Stripe checkout",
+        },
+        {
+            "name": "Profiles",
+            "description": "Trainer and gym profile management",
+        },
+        {
+            "name": "Profile Wizard",
+            "description": "Step-by-step profile setup for new trainers and gyms",
+        },
+        {
+            "name": "Public Profiles",
+            "description": "Public-facing profile discovery and search",
+        },
+        {
+            "name": "Health",
+            "description": "System health and status",
+        },
+    ],
 }
 
 # ---------------------------------------------------------------------------

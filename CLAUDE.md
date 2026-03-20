@@ -44,9 +44,18 @@ apps/
 - Use APIResponse for ALL responses — never return raw Response()
 - Use ErrorCode constants for all error codes
 - Use StandardPagination for all list endpoints
-- Use @extend_schema on all views for Swagger documentation
 - Feature-first app structure — keep related code together
 - Always run: make lint before committing
+
+## Swagger / OpenAPI Rules
+Every view MUST have @extend_schema with ALL of the following before committing.
+No view is complete without Swagger documentation.
+- summary: short one-line description of what the endpoint does
+- description: fuller explanation including edge cases, rate limits, side effects
+- request: the serializer or inline_serializer for POST/PUT/PATCH request bodies
+- responses: dict of every status code the endpoint can return with OpenApiResponse descriptions
+- tags: logical grouping (Authentication, Subscriptions, Profiles, etc.)
+- auth=[]: on every public endpoint (removes the lock icon in Swagger UI)
 
 ## API Response Format
 Every endpoint returns:
