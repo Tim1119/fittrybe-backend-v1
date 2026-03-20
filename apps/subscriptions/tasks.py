@@ -41,6 +41,7 @@ def check_grace_period_expirations():
     count = 0
     for sub in expired:
         sub.lock()
+        send_subscription_locked_email.delay(sub.id)
         count += 1
 
     logger.info("Locked %d subscriptions after grace period.", count)
@@ -79,6 +80,28 @@ def send_grace_period_warning(subscription_id):
         return
 
     _send_grace_warning_email(sub.user, sub.grace_period_end)
+
+
+@shared_task
+def send_subscription_locked_email(subscription_id):
+    """Send account-locked notification when subscription grace period expires."""
+    from apps.subscriptions.models import Subscription
+
+    try:
+        sub = Subscription.objects.select_related("user", "plan").get(
+            pk=subscription_id
+        )
+    except Subscription.DoesNotExist:
+        return
+
+    try:
+        from apps.accounts.emails import send_account_locked_email
+
+        send_account_locked_email(sub.user)
+    except Exception:
+        logger.exception(
+            "Failed to send subscription-locked email to %s", sub.user.email
+        )
 
 
 @shared_task
