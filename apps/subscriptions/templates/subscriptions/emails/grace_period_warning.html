@@ -1,12 +1,13 @@
 {% extends "accounts/emails/base_email.html" %}
 
-{% block title %}Reset Your Fit Trybe Password{% endblock %}
+{% block title %}Fit Trybe Subscription Expired — Action Required{% endblock %}
 
 {% block banner %}
 <tr>
   <td style="background-color:#1A1A2E;padding:32px 40px;text-align:center;">
-    <h1 style="color:#E8490F;font-size:26px;margin:0;font-weight:bold;">
-      Reset Your Password
+    <p style="font-size:32px;margin:0 0 8px;">&#9888;&#65039;</p>
+    <h1 style="color:#E8490F;font-size:22px;margin:0;font-weight:bold;">
+      Subscription Expired
     </h1>
   </td>
 </tr>
@@ -14,18 +15,18 @@
 
 {% block content %}
 <h2 style="color:#1A1A2E;font-size:20px;margin:0 0 16px;">
-  Password Reset Request
+  Renew to keep your access, {{ user_email }}
 </h2>
 <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 20px;">
-  We received a request to reset the password for your Fit Trybe account
-  (<strong>{{ user_email }}</strong>). Use one of the buttons below to set a
-  new password.
+  Your Fit Trybe subscription has expired. You are currently in a
+  <strong>grace period</strong> — your account is still accessible but
+  will be locked if you do not renew.
 </p>
 <div style="border-left:4px solid #E8490F;padding:12px 16px;background-color:#FFF7F5;
             border-radius:0 4px 4px 0;margin:0 0 8px;">
   <p style="color:#374151;font-size:13px;margin:0;line-height:1.5;">
-    <strong>This link expires in 1 hour.</strong> If you did not request a
-    password reset, you can safely ignore this email.
+    Grace period ends: <strong>{{ grace_period_end|date:"F j, Y" }}</strong>.
+    After this date your account will be locked until you renew.
   </p>
 </div>
 {% endblock %}
@@ -38,17 +39,23 @@
        style="display:inline-block;background-color:#E8490F;color:#FFFFFF;
               text-decoration:none;padding:14px 36px;border-radius:8px;
               font-size:15px;font-weight:bold;letter-spacing:0.5px;margin-bottom:12px;">
-      Open in App
+      Renew in App
     </a>
     <br>
-    <!-- Secondary: reset in browser -->
+    <!-- Secondary: renew in browser -->
     <a href="{{ web_url }}"
        style="display:inline-block;background-color:transparent;color:#E8490F;
               text-decoration:none;padding:12px 36px;border-radius:8px;
               font-size:14px;font-weight:bold;letter-spacing:0.5px;
               border:2px solid #E8490F;">
-      Reset in Browser
+      Renew in Browser
     </a>
+    <p style="margin:16px 0 0;">
+      <a href="mailto:support@fittrybe.com"
+         style="color:#6B7280;font-size:13px;text-decoration:underline;">
+        Contact Support
+      </a>
+    </p>
   </td>
 </tr>
 {% endblock %}

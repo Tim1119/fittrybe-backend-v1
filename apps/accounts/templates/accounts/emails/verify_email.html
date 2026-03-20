@@ -30,17 +30,25 @@
 {% block cta %}
 <tr>
   <td style="padding:0 40px 40px;text-align:center;">
-    <a href="{{ verification_url }}"
+    <!-- Primary: open in app -->
+    <a href="{{ mobile_url }}"
        style="display:inline-block;background-color:#E8490F;color:#FFFFFF;
-              text-decoration:none;padding:16px 40px;border-radius:8px;
-              font-size:16px;font-weight:bold;letter-spacing:0.5px;">
-      Verify My Email
+              text-decoration:none;padding:14px 36px;border-radius:8px;
+              font-size:15px;font-weight:bold;letter-spacing:0.5px;margin-bottom:12px;">
+      Open in App
+    </a>
+    <br>
+    <!-- Secondary: verify in browser -->
+    <a href="{{ web_url }}"
+       style="display:inline-block;background-color:transparent;color:#E8490F;
+              text-decoration:none;padding:12px 36px;border-radius:8px;
+              font-size:14px;font-weight:bold;letter-spacing:0.5px;
+              border:2px solid #E8490F;">
+      Verify in Browser
     </a>
     <p style="color:#9CA3AF;font-size:12px;margin:16px 0 0;">
-      Or copy this link:<br>
-      <span style="color:#E8490F;word-break:break-all;">
-        {{ verification_url }}
-      </span>
+      Or copy the browser link:<br>
+      <span style="color:#E8490F;word-break:break-all;">{{ web_url }}</span>
     </p>
   </td>
 </tr>

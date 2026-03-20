@@ -109,16 +109,26 @@ def _send_trial_reminder_email(user, days_remaining, trial_end):
     from django.core.mail import EmailMultiAlternatives
     from django.template.loader import render_to_string
 
+    mobile_scheme = getattr(settings, "MOBILE_URL", "fittrybe://")
+    web_url = f"{settings.FRONTEND_URL}/subscription/upgrade/"
+    mobile_url = f"{mobile_scheme}subscription/upgrade"
     context = {
         "user_email": user.email,
         "days_remaining": days_remaining,
         "trial_end": trial_end,
-        "checkout_url": f"{settings.FRONTEND_URL}/subscription/checkout",
+        "web_url": web_url,
+        "mobile_url": mobile_url,
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": f"{settings.FRONTEND_URL}/static/accounts/images/logo.png",
+        # legacy
+        "checkout_url": web_url,
     }
     html = render_to_string("subscriptions/emails/trial_reminder.html", context)
     text = (
         f"Your Fit Trybe trial ends in {days_remaining} day(s).\n\n"
-        f"Upgrade now: {context['checkout_url']}"
+        f"Upgrade now:\n"
+        f"  In browser: {web_url}\n"
+        f"  In app:     {mobile_url}"
     )
     msg = EmailMultiAlternatives(
         subject=f"Your Fit Trybe trial ends in {days_remaining} day(s)",
@@ -135,16 +145,26 @@ def _send_grace_warning_email(user, grace_period_end):
     from django.core.mail import EmailMultiAlternatives
     from django.template.loader import render_to_string
 
+    mobile_scheme = getattr(settings, "MOBILE_URL", "fittrybe://")
+    web_url = f"{settings.FRONTEND_URL}/subscription/upgrade/"
+    mobile_url = f"{mobile_scheme}subscription/upgrade"
     context = {
         "user_email": user.email,
         "grace_period_end": grace_period_end,
-        "checkout_url": f"{settings.FRONTEND_URL}/subscription/checkout",
+        "web_url": web_url,
+        "mobile_url": mobile_url,
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": f"{settings.FRONTEND_URL}/static/accounts/images/logo.png",
+        # legacy
+        "checkout_url": web_url,
     }
     html = render_to_string("subscriptions/emails/grace_period_warning.html", context)
     text = (
         f"Your Fit Trybe subscription has expired.\n\n"
         f"You have until {grace_period_end} to renew.\n\n"
-        f"Renew now: {context['checkout_url']}"
+        f"Renew now:\n"
+        f"  In browser: {web_url}\n"
+        f"  In app:     {mobile_url}"
     )
     msg = EmailMultiAlternatives(
         subject="Action required: Renew your Fit Trybe subscription",

@@ -33,6 +33,28 @@ class TestSendVerificationEmail:
         send_verification_email(user)
         assert "verify-email" in mailoutbox[0].body
 
+    def test_web_url_in_body(self, mailoutbox):
+        user = UserFactory()
+        send_verification_email(user)
+        assert "/verify-email/" in mailoutbox[0].body
+
+    def test_mobile_deep_link_in_body(self, mailoutbox):
+        user = UserFactory()
+        send_verification_email(user)
+        assert "fittrybe://" in mailoutbox[0].body
+
+    def test_html_contains_web_url(self, mailoutbox):
+        user = UserFactory()
+        send_verification_email(user)
+        html = mailoutbox[0].alternatives[0][0]
+        assert "/verify-email/" in html
+
+    def test_html_contains_mobile_url(self, mailoutbox):
+        user = UserFactory()
+        send_verification_email(user)
+        html = mailoutbox[0].alternatives[0][0]
+        assert "fittrybe://" in html
+
     def test_html_alternative_attached(self, mailoutbox):
         user = UserFactory()
         send_verification_email(user)
@@ -58,6 +80,28 @@ class TestSendPasswordResetEmail:
         send_password_reset_email(user)
         assert "reset-password" in mailoutbox[0].body
 
+    def test_web_url_in_body(self, mailoutbox):
+        user = UserFactory()
+        send_password_reset_email(user)
+        assert "/reset-password/" in mailoutbox[0].body
+
+    def test_mobile_deep_link_in_body(self, mailoutbox):
+        user = UserFactory()
+        send_password_reset_email(user)
+        assert "fittrybe://" in mailoutbox[0].body
+
+    def test_html_contains_web_url(self, mailoutbox):
+        user = UserFactory()
+        send_password_reset_email(user)
+        html = mailoutbox[0].alternatives[0][0]
+        assert "/reset-password/" in html
+
+    def test_html_contains_mobile_url(self, mailoutbox):
+        user = UserFactory()
+        send_password_reset_email(user)
+        html = mailoutbox[0].alternatives[0][0]
+        assert "fittrybe://" in html
+
     def test_subject_is_correct(self, mailoutbox):
         user = UserFactory()
         send_password_reset_email(user)
@@ -76,6 +120,18 @@ class TestSendWelcomeEmail:
         send_welcome_email(user)
         assert "Welcome" in mailoutbox[0].subject
 
+    def test_html_contains_mobile_url(self, mailoutbox):
+        user = UserFactory()
+        send_welcome_email(user)
+        html = mailoutbox[0].alternatives[0][0]
+        assert "fittrybe://" in html
+
+    def test_html_contains_web_url(self, mailoutbox):
+        user = UserFactory()
+        send_welcome_email(user)
+        html = mailoutbox[0].alternatives[0][0]
+        assert "http://localhost:3000" in html
+
 
 @pytest.mark.django_db
 class TestSendAccountLockedEmail:
@@ -89,6 +145,22 @@ class TestSendAccountLockedEmail:
         send_account_locked_email(user)
         assert "Locked" in mailoutbox[0].subject
 
+    def test_web_reset_url_in_body(self, mailoutbox):
+        user = UserFactory()
+        send_account_locked_email(user)
+        assert "/reset-password/" in mailoutbox[0].body
+
+    def test_mobile_deep_link_in_body(self, mailoutbox):
+        user = UserFactory()
+        send_account_locked_email(user)
+        assert "fittrybe://" in mailoutbox[0].body
+
+    def test_html_contains_mobile_url(self, mailoutbox):
+        user = UserFactory()
+        send_account_locked_email(user)
+        html = mailoutbox[0].alternatives[0][0]
+        assert "fittrybe://" in html
+
 
 @pytest.mark.django_db
 class TestSendPasswordChangedEmail:
@@ -101,3 +173,19 @@ class TestSendPasswordChangedEmail:
         user = UserFactory()
         send_password_changed_email(user)
         assert "Password Changed" in mailoutbox[0].subject
+
+    def test_web_reset_url_in_body(self, mailoutbox):
+        user = UserFactory()
+        send_password_changed_email(user)
+        assert "/reset-password/" in mailoutbox[0].body
+
+    def test_mobile_deep_link_in_body(self, mailoutbox):
+        user = UserFactory()
+        send_password_changed_email(user)
+        assert "fittrybe://" in mailoutbox[0].body
+
+    def test_html_contains_mobile_url(self, mailoutbox):
+        user = UserFactory()
+        send_password_changed_email(user)
+        html = mailoutbox[0].alternatives[0][0]
+        assert "fittrybe://" in html

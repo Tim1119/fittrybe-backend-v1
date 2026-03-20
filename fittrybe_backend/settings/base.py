@@ -332,6 +332,7 @@ RATELIMIT_ENABLE = True
 # Frontend URL (for email links)
 # ---------------------------------------------------------------------------
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
+MOBILE_URL = env("MOBILE_URL", default="fittrybe://")
 
 # ---------------------------------------------------------------------------
 # Payment gateways
