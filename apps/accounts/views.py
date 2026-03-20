@@ -60,6 +60,31 @@ def _decode_uid(uid):
         return None
 
 
+def _get_onboarding_data(user, is_first_login):
+    wizard_step = 0
+    profile_completion = 0
+
+    try:
+        if user.role == "trainer":
+            profile = user.trainer_profile
+            wizard_step = profile.wizard_step
+            profile_completion = profile.profile_completion_percentage
+        elif user.role == "gym":
+            profile = user.gym_profile
+            wizard_step = profile.wizard_step
+            profile_completion = profile.profile_completion_percentage
+    except Exception:
+        pass
+
+    return {
+        "status": user.onboarding_status,
+        "is_completed": user.onboarding_status == user.OnboardingStatus.COMPLETED,
+        "is_first_login": is_first_login,
+        "wizard_step": wizard_step,
+        "profile_completion_percentage": profile_completion,
+    }
+
+
 def _get_subscription_data(user):
     if user.role == "client":
         return None
@@ -333,12 +358,7 @@ class LoginView(TokenObtainPairView):
                     "email": user.email,
                     "role": user.role,
                     "subscription": _get_subscription_data(user),
-                    "onboarding": {
-                        "status": user.onboarding_status,
-                        "is_completed": user.onboarding_status
-                        == user.OnboardingStatus.COMPLETED,
-                        "is_first_login": is_first,
-                    },
+                    "onboarding": _get_onboarding_data(user, is_first),
                 },
                 message="Login successful.",
             )
@@ -574,15 +594,31 @@ class MeView(APIView):
             data={
                 **serializer.data,
                 "subscription": _get_subscription_data(user),
-                "onboarding": {
-                    "status": user.onboarding_status,
-                    "is_completed": user.onboarding_status
-                    == user.OnboardingStatus.COMPLETED,
-                    "is_first_login": user.is_first_login,
-                },
+                "onboarding": _get_onboarding_data(user, user.is_first_login),
             },
             message="Profile retrieved successfully.",
         )
+
+
+@extend_schema(
+    summary="Complete onboarding",
+    description=(
+        "Mark the current user's onboarding as completed. "
+        "Idempotent — safe to call if already completed."
+    ),
+    request=None,
+    responses={
+        200: OpenApiResponse(description="Onboarding marked as completed"),
+        401: OpenApiResponse(description="Not authenticated"),
+    },
+    tags=["Authentication"],
+)
+class CompleteOnboardingView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        request.user.complete_onboarding()
+        return APIResponse.success(message="Onboarding completed.")
 
 
 @extend_schema(

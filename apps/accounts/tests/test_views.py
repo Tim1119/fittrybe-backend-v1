@@ -266,6 +266,18 @@ class TestLoginView:
         assert "status" in onboarding
         assert "is_completed" in onboarding
         assert "is_first_login" in onboarding
+        assert "wizard_step" in onboarding
+        assert "profile_completion_percentage" in onboarding
+
+    def test_login_onboarding_wizard_step_defaults_to_zero(self, api_client):
+        user = UserFactory()
+        resp = api_client.post(
+            self.URL,
+            {"email": user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        assert resp.data["data"]["onboarding"]["wizard_step"] == 0
+        assert resp.data["data"]["onboarding"]["profile_completion_percentage"] == 0
 
     def test_is_first_login_set_to_false_after_first_login(self, api_client):
         user = UserFactory()
@@ -428,7 +440,35 @@ class TestMeView:
         assert "status" in onboarding
         assert "is_completed" in onboarding
         assert "is_first_login" in onboarding
+        assert "wizard_step" in onboarding
+        assert "profile_completion_percentage" in onboarding
 
     def test_unauthenticated_returns_401(self, api_client):
         resp = api_client.get(self.URL)
         assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestCompleteOnboardingView:
+    URL = "/api/v1/auth/onboarding/complete/"
+
+    def test_completes_onboarding(self, auth_client):
+        resp = auth_client.post(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        auth_client._user.refresh_from_db()
+        assert auth_client._user.onboarding_status == "completed"
+
+    def test_returns_success_message(self, auth_client):
+        resp = auth_client.post(self.URL)
+        assert resp.data["message"] == "Onboarding completed."
+
+    def test_unauthenticated_returns_401(self, api_client):
+        resp = api_client.post(self.URL)
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_idempotent_if_already_completed(self, auth_client):
+        auth_client.post(self.URL)
+        resp = auth_client.post(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        auth_client._user.refresh_from_db()
+        assert auth_client._user.onboarding_status == "completed"

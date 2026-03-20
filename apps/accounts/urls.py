@@ -19,5 +19,10 @@ urlpatterns = [
         name="change-password",
     ),
     path("me/", views.MeView.as_view(), name="me"),
+    path(
+        "onboarding/complete/",
+        views.CompleteOnboardingView.as_view(),
+        name="onboarding-complete",
+    ),
     path("token/refresh/", views.TokenRefreshView.as_view(), name="token-refresh"),
 ]
