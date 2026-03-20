@@ -33,10 +33,13 @@ from apps.accounts.emails import (
 from apps.accounts.models import User
 from apps.accounts.serializers import (
     ChangePasswordSerializer,
+    ClientRegisterSerializer,
     CustomTokenObtainPairSerializer,
     ForgotPasswordSerializer,
+    GymRegisterSerializer,
     RegisterSerializer,
     ResetPasswordSerializer,
+    TrainerRegisterSerializer,
     UserProfileSerializer,
 )
 from apps.accounts.tasks import (
@@ -79,20 +82,47 @@ def _get_subscription_data(user):
         return None
 
 
+_ROLE_SERIALIZER_MAP = {
+    "trainer": TrainerRegisterSerializer,
+    "gym": GymRegisterSerializer,
+    "client": ClientRegisterSerializer,
+}
+
+
 @extend_schema(
     summary="Register a new user",
     description=(
         "Create a new trainer, gym, or client account. "
         "Sends a verification email upon success. "
-        "Rate limited to 5 registrations per hour per IP."
+        "Rate limited to 5 registrations per hour per IP.\n\n"
+        "**Role-specific required fields:**\n"
+        "- `trainer`: `display_name`, `terms_accepted`\n"
+        "- `gym`: `terms_accepted`\n"
+        "- `client`: `display_name`, `terms_accepted`"
     ),
-    request=RegisterSerializer,
+    request=inline_serializer(
+        name="RegisterRequest",
+        fields={
+            "email": drf_serializers.EmailField(),
+            "password": drf_serializers.CharField(),
+            "confirm_password": drf_serializers.CharField(),
+            "role": drf_serializers.ChoiceField(choices=User.Role.choices),
+            "display_name": drf_serializers.CharField(
+                required=False,
+                help_text="Required for trainer and client roles",
+            ),
+            "terms_accepted": drf_serializers.BooleanField(
+                help_text="Must be true to complete registration"
+            ),
+        },
+    ),
     responses={
         201: OpenApiResponse(
             description="Registration successful — verification email sent"
         ),
         400: OpenApiResponse(
-            description="Validation error — invalid or duplicate data"
+            description="Validation error — invalid data, duplicate email, "
+            "weak password, or terms not accepted"
         ),
         429: OpenApiResponse(description="Rate limit exceeded"),
     },
@@ -106,7 +136,9 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
+        role = request.data.get("role", "")
+        serializer_class = _ROLE_SERIALIZER_MAP.get(role, RegisterSerializer)
+        serializer = serializer_class(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

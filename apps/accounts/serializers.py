@@ -5,6 +5,7 @@ Accounts serializers.
 import zxcvbn
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -62,6 +63,81 @@ class RegisterSerializer(serializers.Serializer):
             is_active=False,
             is_email_verified=False,
         )
+
+
+def _validate_terms_accepted(value):
+    if not value:
+        raise serializers.ValidationError("You must accept the terms to register.")
+    return value
+
+
+class TrainerRegisterSerializer(RegisterSerializer):
+    display_name = serializers.CharField(max_length=100)
+    terms_accepted = serializers.BooleanField()
+
+    def validate_terms_accepted(self, value):
+        return _validate_terms_accepted(value)
+
+    def create(self, validated_data):
+        display_name = validated_data.pop("display_name")
+        validated_data.pop("terms_accepted")
+        validated_data.pop("confirm_password")
+        user = User.objects.create_user(
+            email=validated_data["email"],
+            password=validated_data["password"],
+            role=validated_data["role"],
+            is_active=False,
+            is_email_verified=False,
+        )
+        user.display_name = display_name
+        user.terms_accepted_at = timezone.now()
+        user.save(update_fields=["display_name", "terms_accepted_at"])
+        return user
+
+
+class GymRegisterSerializer(RegisterSerializer):
+    terms_accepted = serializers.BooleanField()
+
+    def validate_terms_accepted(self, value):
+        return _validate_terms_accepted(value)
+
+    def create(self, validated_data):
+        validated_data.pop("terms_accepted")
+        validated_data.pop("confirm_password")
+        user = User.objects.create_user(
+            email=validated_data["email"],
+            password=validated_data["password"],
+            role=validated_data["role"],
+            is_active=False,
+            is_email_verified=False,
+        )
+        user.terms_accepted_at = timezone.now()
+        user.save(update_fields=["terms_accepted_at"])
+        return user
+
+
+class ClientRegisterSerializer(RegisterSerializer):
+    display_name = serializers.CharField(max_length=100)
+    terms_accepted = serializers.BooleanField()
+
+    def validate_terms_accepted(self, value):
+        return _validate_terms_accepted(value)
+
+    def create(self, validated_data):
+        display_name = validated_data.pop("display_name")
+        validated_data.pop("terms_accepted")
+        validated_data.pop("confirm_password")
+        user = User.objects.create_user(
+            email=validated_data["email"],
+            password=validated_data["password"],
+            role=validated_data["role"],
+            is_active=False,
+            is_email_verified=False,
+        )
+        user.display_name = display_name
+        user.terms_accepted_at = timezone.now()
+        user.save(update_fields=["display_name", "terms_accepted_at"])
+        return user
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):

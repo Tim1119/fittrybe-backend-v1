@@ -50,6 +50,8 @@ class TestRegisterView:
             "password": STRONG,
             "confirm_password": STRONG,
             "role": "trainer",
+            "display_name": "Test Trainer",
+            "terms_accepted": True,
         }
         defaults.update(kw)
         return defaults
@@ -60,7 +62,9 @@ class TestRegisterView:
 
     def test_register_gym_returns_201(self, api_client):
         resp = api_client.post(
-            self.URL, self._payload(email="gym@example.com", role="gym"), format="json"
+            self.URL,
+            self._payload(email="gym@example.com", role="gym"),
+            format="json",
         )
         assert resp.status_code == status.HTTP_201_CREATED
 
@@ -91,6 +95,78 @@ class TestRegisterView:
         api_client.post(self.URL, self._payload(), format="json")
         assert len(mailoutbox) == 1
         assert "Verify" in mailoutbox[0].subject
+
+    # --- terms_accepted validation ---
+
+    def test_missing_terms_accepted_returns_400(self, api_client):
+        payload = self._payload()
+        payload.pop("terms_accepted")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_terms_accepted_false_returns_400(self, api_client):
+        resp = api_client.post(
+            self.URL, self._payload(terms_accepted=False), format="json"
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_gym_missing_terms_accepted_returns_400(self, api_client):
+        payload = self._payload(email="gym2@example.com", role="gym")
+        payload.pop("terms_accepted")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_client_missing_terms_accepted_returns_400(self, api_client):
+        payload = self._payload(email="client2@example.com", role="client")
+        payload.pop("terms_accepted")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    # --- display_name and terms_accepted_at persistence ---
+
+    def test_display_name_saved_on_trainer(self, api_client):
+        from apps.accounts.models import User
+
+        resp = api_client.post(
+            self.URL,
+            self._payload(display_name="Jane Trainer"),
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        user = User.objects.get(email="new@example.com")
+        assert user.display_name == "Jane Trainer"
+
+    def test_terms_accepted_at_set_on_trainer(self, api_client):
+        from apps.accounts.models import User
+
+        api_client.post(self.URL, self._payload(), format="json")
+        user = User.objects.get(email="new@example.com")
+        assert user.terms_accepted_at is not None
+
+    def test_display_name_saved_on_client(self, api_client):
+        from apps.accounts.models import User
+
+        resp = api_client.post(
+            self.URL,
+            self._payload(
+                email="clientdn@example.com", role="client", display_name="Joe Client"
+            ),
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        user = User.objects.get(email="clientdn@example.com")
+        assert user.display_name == "Joe Client"
+
+    def test_terms_accepted_at_set_on_gym(self, api_client):
+        from apps.accounts.models import User
+
+        api_client.post(
+            self.URL,
+            self._payload(email="gym3@example.com", role="gym"),
+            format="json",
+        )
+        user = User.objects.get(email="gym3@example.com")
+        assert user.terms_accepted_at is not None
 
 
 # ---------------------------------------------------------------------------

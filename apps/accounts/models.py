@@ -46,6 +46,10 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Profile
+    display_name = models.CharField(max_length=100, blank=True)
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
+
     # Soft delete
     deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
