@@ -112,6 +112,13 @@ Update basic profile information. Required for both trainers and gyms.
 Sets `wizard_step` to at least 1.
 Sets `onboarding_status` to `in_progress`.
 Returns the full updated profile including `profile_completion_percentage`.
+
+**Photo uploads are handled separately:**
+- `POST /api/v1/profiles/photo/` — profile photo (optional)
+- `POST /api/v1/profiles/cover/` — cover photo (optional)
+
+These can be called during step 1 or any time after.
+Step 1 only handles text fields.
     """,
     request=inline_serializer(
         name="WizardStep1Request",
