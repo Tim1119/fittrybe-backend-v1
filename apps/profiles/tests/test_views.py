@@ -13,6 +13,7 @@ from apps.profiles.tests.factories import (
     GymProfileFactory,
     PublishedGymProfileFactory,
     PublishedTrainerProfileFactory,
+    ServiceTrainerFactory,
     SpecialisationFactory,
     TrainerProfileFactory,
 )
@@ -149,13 +150,51 @@ class TestWizardStep2View:
         assert profile.certifications.count() == 1
         assert profile.certifications.first().name == "New Cert"
 
-    def test_step2_forbidden_for_gym(self):
+    def test_trainer_step2_saves_services(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        payload = {
+            "specialisation_ids": [],
+            "certifications": [],
+            "services": [
+                {"name": "Personal Training", "session_type": "physical"},
+                {"name": "Online Coaching", "session_type": "virtual"},
+            ],
+        }
+        resp = client.put(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        assert profile.services.count() == 2
+
+    def test_trainer_step2_services_replaced(self):
+        profile = TrainerProfileFactory()
+        ServiceTrainerFactory(trainer=profile, name="Old Service")
+        client = _auth_client(profile.user)
+        payload = {
+            "specialisation_ids": [],
+            "certifications": [],
+            "services": [{"name": "New Service"}],
+        }
+        client.put(self.URL, payload, format="json")
+        assert profile.services.count() == 1
+        assert profile.services.first().name == "New Service"
+
+    def test_gym_step2_saves_services(self):
         profile = GymProfileFactory()
         client = _auth_client(profile.user)
-        resp = client.put(
-            self.URL, {"specialisation_ids": [], "certifications": []}, format="json"
-        )
-        assert resp.status_code == status.HTTP_403_FORBIDDEN
+        payload = {
+            "services": [
+                {"name": "Group Classes", "session_type": "physical"},
+            ]
+        }
+        resp = client.put(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        assert profile.services.count() == 1
+
+    def test_gym_step2_empty_services_ok(self):
+        profile = GymProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.put(self.URL, {"services": []}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.django_db
@@ -334,6 +373,15 @@ class TestPublicTrainerProfileView:
         profile = PublishedTrainerProfileFactory(phone_number="09011111111")
         resp = APIClient().get(f"/api/v1/profiles/trainer/{profile.slug}/")
         assert "phone_number" not in resp.data["data"]
+
+    def test_services_appear_in_public_profile(self):
+        profile = PublishedTrainerProfileFactory()
+        ServiceTrainerFactory(trainer=profile, name="HIIT Session")
+        resp = APIClient().get(f"/api/v1/profiles/trainer/{profile.slug}/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert "services" in resp.data["data"]
+        names = [s["name"] for s in resp.data["data"]["services"]]
+        assert "HIIT Session" in names
 
 
 @pytest.mark.django_db

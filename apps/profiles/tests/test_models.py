@@ -10,6 +10,8 @@ from apps.profiles.tests.factories import (
     ClientProfileFactory,
     GymProfileFactory,
     GymTrainerFactory,
+    ServiceGymFactory,
+    ServiceTrainerFactory,
     SpecialisationFactory,
     TrainerProfileFactory,
 )
@@ -47,11 +49,11 @@ class TestTrainerProfileModel:
             profile_photo_url="http://example.com/photo.jpg",
             cover_photo_url="http://example.com/cover.jpg",
             years_experience=5,
-            pricing_range="10000 NGN",
         )
         spec = SpecialisationFactory()
         profile.specialisations.add(spec)
         AvailabilityTrainerFactory(trainer=profile)
+        ServiceTrainerFactory(trainer=profile)
         assert profile.profile_completion_percentage == 100
 
     def test_get_missing_fields_returns_empty_when_complete(self):
@@ -61,11 +63,11 @@ class TestTrainerProfileModel:
             profile_photo_url="http://example.com/p.jpg",
             cover_photo_url="http://example.com/c.jpg",
             years_experience=3,
-            pricing_range="5000",
         )
         spec = SpecialisationFactory()
         profile.specialisations.add(spec)
         AvailabilityTrainerFactory(trainer=profile)
+        ServiceTrainerFactory(trainer=profile)
         assert profile.get_missing_fields() == []
 
     def test_get_missing_fields_lists_empty_required_fields(self):
@@ -73,6 +75,7 @@ class TestTrainerProfileModel:
         missing = profile.get_missing_fields()
         assert "bio" in missing
         assert "availability" in missing
+        assert "services" in missing
 
     def test_get_public_url_contains_slug(self, settings):
         settings.FRONTEND_URL = "http://frontend.test"
@@ -203,3 +206,49 @@ class TestSpecialisationModel:
     def test_str(self):
         spec = SpecialisationFactory(name="HIIT")
         assert str(spec) == "HIIT"
+
+
+@pytest.mark.django_db
+class TestServiceModel:
+    def test_trainer_service_str(self):
+        svc = ServiceTrainerFactory(name="Personal Training 1-on-1")
+        assert str(svc) == "Personal Training 1-on-1"
+
+    def test_gym_service_str(self):
+        svc = ServiceGymFactory(name="Group Classes")
+        assert str(svc) == "Group Classes"
+
+    def test_clean_raises_without_trainer_or_gym(self):
+        svc = ServiceTrainerFactory.build(trainer=None, gym=None)
+        with pytest.raises(Exception, match="trainer or gym"):
+            svc.clean()
+
+    def test_clean_raises_with_both_trainer_and_gym(self):
+        trainer = TrainerProfileFactory()
+        gym = GymProfileFactory()
+        svc = ServiceTrainerFactory.build(trainer=trainer, gym=gym)
+        with pytest.raises(Exception, match="cannot belong to both"):
+            svc.clean()
+
+    def test_trainer_completion_increases_with_service(self):
+        profile = TrainerProfileFactory(
+            bio="bio",
+            location="Lagos",
+            profile_photo_url="http://x.com/p.jpg",
+            cover_photo_url="http://x.com/c.jpg",
+            years_experience=3,
+        )
+        before = profile.profile_completion_percentage
+        ServiceTrainerFactory(trainer=profile)
+        assert profile.profile_completion_percentage == before + 10
+
+    def test_services_missing_field_cleared_after_adding_service(self):
+        profile = TrainerProfileFactory()
+        assert "services" in profile.get_missing_fields()
+        ServiceTrainerFactory(trainer=profile)
+        assert "services" not in profile.get_missing_fields()
+
+    def test_gym_service_saved_with_correct_fk(self):
+        svc = ServiceGymFactory(name="Yoga Class")
+        assert svc.gym is not None
+        assert svc.trainer is None

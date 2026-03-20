@@ -6,6 +6,7 @@ from apps.profiles.models import (
     ClientProfile,
     GymProfile,
     GymTrainer,
+    Service,
     Specialisation,
     TrainerProfile,
 )
@@ -43,6 +44,20 @@ class CertificationInline(admin.TabularInline):
     fields = ("name", "issuing_body", "year_obtained")
 
 
+class ServiceTrainerInline(admin.TabularInline):
+    model = Service
+    fk_name = "trainer"
+    extra = 0
+    fields = ("name", "description", "session_type", "display_order")
+
+
+class ServiceGymInline(admin.TabularInline):
+    model = Service
+    fk_name = "gym"
+    extra = 0
+    fields = ("name", "description", "session_type", "display_order")
+
+
 @admin.register(TrainerProfile)
 class TrainerProfileAdmin(admin.ModelAdmin):
     list_display = (
@@ -56,7 +71,7 @@ class TrainerProfileAdmin(admin.ModelAdmin):
     list_filter = ("trainer_type", "is_published", "wizard_completed")
     search_fields = ("full_name", "user__email", "location")
     raw_id_fields = ("user",)
-    inlines = [AvailabilityTrainerInline, CertificationInline]
+    inlines = [AvailabilityTrainerInline, CertificationInline, ServiceTrainerInline]
     readonly_fields = ("slug", "avg_rating", "rating_count", "created_at", "updated_at")
 
 
@@ -72,7 +87,7 @@ class GymProfileAdmin(admin.ModelAdmin):
     list_filter = ("is_published", "wizard_completed")
     search_fields = ("gym_name", "user__email", "city", "location")
     raw_id_fields = ("user",)
-    inlines = [AvailabilityGymInline]
+    inlines = [AvailabilityGymInline, ServiceGymInline]
     readonly_fields = ("slug", "avg_rating", "rating_count", "created_at", "updated_at")
 
 
@@ -88,6 +103,14 @@ class SpecialisationAdmin(admin.ModelAdmin):
 class GymTrainerAdmin(admin.ModelAdmin):
     list_display = ("trainer", "gym", "role")
     list_filter = ("role",)
+    raw_id_fields = ("trainer", "gym")
+
+
+@admin.register(Service)
+class ServiceAdmin(admin.ModelAdmin):
+    list_display = ("name", "session_type", "display_order", "trainer", "gym")
+    list_filter = ("session_type",)
+    search_fields = ("name", "trainer__full_name", "gym__gym_name")
     raw_id_fields = ("trainer", "gym")
 
 

@@ -11,6 +11,7 @@ from apps.profiles.models import (
     ClientProfile,
     GymProfile,
     GymTrainer,
+    Service,
     Specialisation,
     TrainerProfile,
 )
@@ -132,6 +133,30 @@ class CertificationFactory(DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Cert {n}")
     issuing_body = "NASM"
     year_obtained = 2020
+
+
+class ServiceTrainerFactory(DjangoModelFactory):
+    class Meta:
+        model = Service
+
+    trainer = factory.SubFactory(TrainerProfileFactory)
+    gym = None
+    name = factory.Sequence(lambda n: f"Service {n}")
+    description = ""
+    session_type = Service.SessionType.BOTH
+    display_order = 0
+
+
+class ServiceGymFactory(DjangoModelFactory):
+    class Meta:
+        model = Service
+
+    gym = factory.SubFactory(GymProfileFactory)
+    trainer = None
+    name = factory.Sequence(lambda n: f"Gym Service {n}")
+    description = ""
+    session_type = Service.SessionType.PHYSICAL
+    display_order = 0
 
 
 class ClientProfileFactory(DjangoModelFactory):

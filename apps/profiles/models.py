@@ -1,6 +1,6 @@
 """
 Profile models — Specialisation, TrainerProfile, GymProfile,
-GymTrainer, Availability, Certification, ClientProfile.
+GymTrainer, Availability, Certification, Service, ClientProfile.
 """
 
 from decimal import Decimal
@@ -90,7 +90,7 @@ class TrainerProfile(BaseModel):
             points += 5
         if self.years_experience > 0:
             points += 5
-        if self.pricing_range:
+        if self.services.exists():
             points += 10
         if self.specialisations.exists():
             points += 10
@@ -110,8 +110,8 @@ class TrainerProfile(BaseModel):
             missing.append("cover_photo")
         if self.years_experience == 0:
             missing.append("years_experience")
-        if not self.pricing_range:
-            missing.append("pricing_range")
+        if not self.services.exists():
+            missing.append("services")
         if not self.specialisations.exists():
             missing.append("specialisations")
         if not self.availability.exists():
@@ -322,6 +322,53 @@ class Certification(BaseModel):
 
     def __str__(self):
         return f"{self.name} - {self.trainer.full_name}"
+
+
+class Service(BaseModel):
+    class SessionType(models.TextChoices):
+        PHYSICAL = "physical", "Physical"
+        VIRTUAL = "virtual", "Virtual"
+        BOTH = "both", "Both"
+
+    trainer = models.ForeignKey(
+        TrainerProfile,
+        on_delete=models.CASCADE,
+        related_name="services",
+        null=True,
+        blank=True,
+    )
+    gym = models.ForeignKey(
+        GymProfile,
+        on_delete=models.CASCADE,
+        related_name="services",
+        null=True,
+        blank=True,
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="e.g. Personal Training 1-on-1",
+    )
+    description = models.TextField(max_length=500, blank=True)
+    session_type = models.CharField(
+        max_length=10,
+        choices=SessionType.choices,
+        default=SessionType.BOTH,
+    )
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Service"
+        verbose_name_plural = "Services"
+        ordering = ["display_order", "name"]
+
+    def clean(self):
+        if not self.trainer and not self.gym:
+            raise ValidationError("Service must belong to trainer or gym.")
+        if self.trainer and self.gym:
+            raise ValidationError("Service cannot belong to both.")
+
+    def __str__(self):
+        return self.name
 
 
 class ClientProfile(BaseModel):

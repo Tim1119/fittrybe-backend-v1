@@ -10,6 +10,7 @@ from apps.profiles.models import (
     Certification,
     ClientProfile,
     GymProfile,
+    Service,
     Specialisation,
     TrainerProfile,
 )
@@ -58,6 +59,13 @@ class AvailabilitySerializer(serializers.ModelSerializer):
         return attrs
 
 
+class ServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
+        fields = ("id", "name", "description", "session_type", "display_order")
+        read_only_fields = ("id",)
+
+
 # ---------------------------------------------------------------------------
 # Trainer profile
 # ---------------------------------------------------------------------------
@@ -67,6 +75,7 @@ class TrainerProfileSerializer(serializers.ModelSerializer):
     specialisations = SpecialisationSerializer(many=True, read_only=True)
     certifications = CertificationSerializer(many=True, read_only=True)
     availability = AvailabilitySerializer(many=True, read_only=True)
+    services = ServiceSerializer(many=True, read_only=True)
     profile_completion_percentage = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
 
@@ -92,6 +101,7 @@ class TrainerProfileSerializer(serializers.ModelSerializer):
             "specialisations",
             "certifications",
             "availability",
+            "services",
             "profile_completion_percentage",
             "public_url",
             "created_at",
@@ -118,6 +128,7 @@ class TrainerProfileSerializer(serializers.ModelSerializer):
 class TrainerProfilePublicSerializer(serializers.ModelSerializer):
     specialisations = SpecialisationSerializer(many=True, read_only=True)
     availability = AvailabilitySerializer(many=True, read_only=True)
+    services = ServiceSerializer(many=True, read_only=True)
     profile_completion_percentage = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
 
@@ -138,6 +149,7 @@ class TrainerProfilePublicSerializer(serializers.ModelSerializer):
             "rating_count",
             "specialisations",
             "availability",
+            "services",
             "profile_completion_percentage",
             "public_url",
         )
@@ -159,6 +171,7 @@ class TrainerProfilePublicSerializer(serializers.ModelSerializer):
 
 class GymProfileSerializer(serializers.ModelSerializer):
     availability = AvailabilitySerializer(many=True, read_only=True)
+    services = ServiceSerializer(many=True, read_only=True)
     profile_completion_percentage = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
 
@@ -182,6 +195,7 @@ class GymProfileSerializer(serializers.ModelSerializer):
             "wizard_step",
             "wizard_completed",
             "availability",
+            "services",
             "profile_completion_percentage",
             "public_url",
             "created_at",
@@ -207,6 +221,7 @@ class GymProfileSerializer(serializers.ModelSerializer):
 
 class GymProfilePublicSerializer(serializers.ModelSerializer):
     availability = AvailabilitySerializer(many=True, read_only=True)
+    services = ServiceSerializer(many=True, read_only=True)
     profile_completion_percentage = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
 
@@ -224,6 +239,7 @@ class GymProfilePublicSerializer(serializers.ModelSerializer):
             "avg_rating",
             "rating_count",
             "availability",
+            "services",
             "profile_completion_percentage",
             "public_url",
         )
@@ -301,13 +317,29 @@ class _CertificationInputSerializer(serializers.Serializer):
     year_obtained = serializers.IntegerField(required=False, allow_null=True)
 
 
+class _ServiceInputSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=200)
+    description = serializers.CharField(
+        max_length=500, required=False, allow_blank=True, default=""
+    )
+    session_type = serializers.ChoiceField(
+        choices=Service.SessionType.choices,
+        required=False,
+        default=Service.SessionType.BOTH,
+    )
+    display_order = serializers.IntegerField(required=False, default=0, min_value=0)
+
+
 class WizardStep2Serializer(serializers.Serializer):
+    """Trainer step 2: specialisations, certifications, services, pricing."""
+
     specialisation_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
         default=list,
     )
     certifications = _CertificationInputSerializer(many=True, required=False)
+    services = _ServiceInputSerializer(many=True, required=False)
     pricing_range = serializers.CharField(
         max_length=200, required=False, allow_blank=True, default=""
     )
@@ -318,6 +350,12 @@ class WizardStep2Serializer(serializers.Serializer):
                 "You can select at most 10 specialisations."
             )
         return value
+
+
+class WizardStep2GymSerializer(serializers.Serializer):
+    """Gym step 2: services only."""
+
+    services = _ServiceInputSerializer(many=True, required=False)
 
 
 class WizardStep3TrainerSerializer(serializers.Serializer):

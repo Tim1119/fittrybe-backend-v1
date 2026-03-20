@@ -30,6 +30,7 @@ from apps.profiles.models import (
     Certification,
     ClientProfile,
     GymProfile,
+    Service,
     Specialisation,
     TrainerProfile,
 )
@@ -44,6 +45,7 @@ from apps.profiles.serializers import (
     TrainerProfileSerializer,
     WizardStep1GymSerializer,
     WizardStep1TrainerSerializer,
+    WizardStep2GymSerializer,
     WizardStep2Serializer,
     WizardStep3GymSerializer,
     WizardStep3TrainerSerializer,
@@ -143,62 +145,93 @@ class WizardStep1View(APIView):
 
 
 @extend_schema(
-    summary="Wizard step 2 — specialisations & certifications (trainer only)",
+    summary="Wizard step 2 — specialisations, certifications & services",
     description=(
-        "Update specialisations (max 10), certifications list, and pricing range. "
-        "Replaces all existing specialisations and certifications. "
-        "Trainer only."
+        "Trainer: update specialisations (max 10), certifications, services, "
+        "and pricing range. Replaces all existing data. "
+        "Gym: update services only. "
+        "Works for both trainers and gyms."
     ),
     request=WizardStep2Serializer,
     responses={
         200: OpenApiResponse(description="Step 2 saved"),
         400: OpenApiResponse(description="Validation error or >10 specialisations"),
-        403: OpenApiResponse(description="Not a trainer"),
+        403: OpenApiResponse(description="Not a trainer or gym"),
         404: OpenApiResponse(description="Profile not found"),
     },
     tags=["Profile Wizard"],
 )
 class WizardStep2View(APIView):
-    permission_classes = [IsAuthenticated, IsTrainer]
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
 
     def put(self, request):
-        profile = _get_trainer_profile(request.user)
-        if not profile:
-            return _profile_not_found()
+        user = request.user
+        is_trainer = user.role == "trainer"
 
-        serializer = WizardStep2Serializer(data=request.data)
+        if is_trainer:
+            profile = _get_trainer_profile(user)
+            if not profile:
+                return _profile_not_found()
+            serializer = WizardStep2Serializer(data=request.data)
+        else:
+            profile = _get_gym_profile(user)
+            if not profile:
+                return _profile_not_found()
+            serializer = WizardStep2GymSerializer(data=request.data)
+
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
-        spec_ids = data.get("specialisation_ids", [])
-        certs_data = data.get("certifications", [])
-        pricing_range = data.get("pricing_range", "")
+        services_data = data.get("services", [])
 
         with transaction.atomic():
-            if spec_ids:
-                specs = Specialisation.objects.filter(id__in=spec_ids)
-                profile.specialisations.set(specs)
-            else:
-                profile.specialisations.clear()
+            if is_trainer:
+                spec_ids = data.get("specialisation_ids", [])
+                certs_data = data.get("certifications", [])
+                pricing_range = data.get("pricing_range", "")
 
-            profile.certifications.all().delete()
-            for cert in certs_data:
-                Certification.objects.create(
-                    trainer=profile,
-                    name=cert["name"],
-                    issuing_body=cert.get("issuing_body", ""),
-                    year_obtained=cert.get("year_obtained"),
+                if spec_ids:
+                    specs = Specialisation.objects.filter(id__in=spec_ids)
+                    profile.specialisations.set(specs)
+                else:
+                    profile.specialisations.clear()
+
+                profile.certifications.all().delete()
+                for cert in certs_data:
+                    Certification.objects.create(
+                        trainer=profile,
+                        name=cert["name"],
+                        issuing_body=cert.get("issuing_body", ""),
+                        year_obtained=cert.get("year_obtained"),
+                    )
+
+                profile.pricing_range = pricing_range
+                profile.save(update_fields=["pricing_range"])
+
+            # Replace services for both roles
+            profile.services.all().delete()
+            for svc in services_data:
+                kwargs = dict(
+                    name=svc["name"],
+                    description=svc.get("description", ""),
+                    session_type=svc.get("session_type", Service.SessionType.BOTH),
+                    display_order=svc.get("display_order", 0),
                 )
+                if is_trainer:
+                    Service.objects.create(trainer=profile, **kwargs)
+                else:
+                    Service.objects.create(gym=profile, **kwargs)
 
-            profile.pricing_range = pricing_range
             profile.wizard_step = max(profile.wizard_step, 2)
-            profile.save(update_fields=["pricing_range", "wizard_step"])
+            profile.save(update_fields=["wizard_step"])
 
-        return APIResponse.success(
-            data=TrainerProfileSerializer(profile).data,
-            message="Step 2 saved.",
+        out = (
+            TrainerProfileSerializer(profile)
+            if is_trainer
+            else GymProfileSerializer(profile)
         )
+        return APIResponse.success(data=out.data, message="Step 2 saved.")
 
 
 @extend_schema(
