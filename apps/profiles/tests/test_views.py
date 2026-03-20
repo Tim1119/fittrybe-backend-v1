@@ -268,8 +268,17 @@ class TestWizardStep3View:
 class TestWizardStep4View:
     URL = "/api/v1/profiles/wizard/step4/publish/"
 
+    def _ready_profile(self):
+        """Return a trainer profile with ≥60% completion."""
+        return TrainerProfileFactory(
+            full_name="Ready Trainer",
+            bio="A solid bio",
+            location="Lagos",
+            profile_photo_url="http://example.com/photo.jpg",
+        )
+
     def test_publishes_profile(self):
-        profile = TrainerProfileFactory()
+        profile = self._ready_profile()
         BasicPlanFactory()
         SubscriptionFactory(user=profile.user)
         client = _auth_client(profile.user)
@@ -281,7 +290,7 @@ class TestWizardStep4View:
         assert profile.wizard_step == 4
 
     def test_completes_onboarding(self):
-        profile = TrainerProfileFactory()
+        profile = self._ready_profile()
         BasicPlanFactory()
         SubscriptionFactory(user=profile.user)
         client = _auth_client(profile.user)
@@ -292,12 +301,39 @@ class TestWizardStep4View:
     def test_blocked_when_subscription_locked(self):
         from apps.subscriptions.models import Subscription
 
-        profile = TrainerProfileFactory()
+        profile = self._ready_profile()
         BasicPlanFactory()
         SubscriptionFactory(user=profile.user, status=Subscription.Status.LOCKED)
         client = _auth_client(profile.user)
         resp = client.post(self.URL)
         assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_blocked_when_profile_completion_below_60(self):
+        profile = TrainerProfileFactory()  # 0% completion
+        BasicPlanFactory()
+        SubscriptionFactory(user=profile.user)
+        client = _auth_client(profile.user)
+        resp = client.post(self.URL)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "missing_fields" in resp.data["errors"]
+        assert resp.data["errors"]["minimum_required"] == 60
+
+    def test_blocked_at_exactly_59_percent(self):
+        # full_name(15) + bio(15) + location(10) + years_exp(5) + cover_photo(5) = 50
+        profile = TrainerProfileFactory(
+            full_name="Trainer",
+            bio="Some bio",
+            location="Lagos",
+            years_experience=3,
+            cover_photo_url="http://example.com/cover.jpg",
+        )
+        # completion = 15+15+10+5+5 = 50 < 60
+        assert profile.profile_completion_percentage < 60
+        BasicPlanFactory()
+        SubscriptionFactory(user=profile.user)
+        client = _auth_client(profile.user)
+        resp = client.post(self.URL)
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.django_db

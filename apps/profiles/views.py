@@ -22,6 +22,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.error_codes import ErrorCode
 from apps.core.pagination import StandardPagination
 from apps.core.permissions import IsTrainer, IsTrainerOrGym
 from apps.core.responses import APIResponse
@@ -322,6 +323,9 @@ class WizardStep4View(APIView):
                 ),
                 description="Profile published",
             ),
+            400: OpenApiResponse(
+                description="Profile completion below 60% — missing_fields listed"
+            ),
             403: OpenApiResponse(
                 description="Not a trainer or gym, or subscription locked"
             ),
@@ -335,6 +339,23 @@ class WizardStep4View(APIView):
         profile = _get_trainer_profile(user) if is_trainer else _get_gym_profile(user)
         if not profile:
             return _profile_not_found()
+
+        if profile.profile_completion_percentage < 60:
+            return APIResponse.error(
+                message=(
+                    "Your profile is not complete enough to publish. "
+                    "Please fill in more details."
+                ),
+                code=ErrorCode.VALIDATION_ERROR,
+                errors={
+                    "missing_fields": profile.get_missing_fields(),
+                    "profile_completion_percentage": (
+                        profile.profile_completion_percentage
+                    ),
+                    "minimum_required": 60,
+                },
+                status_code=400,
+            )
 
         try:
             if not user.subscription.is_access_allowed():
