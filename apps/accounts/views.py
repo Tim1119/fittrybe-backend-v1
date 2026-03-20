@@ -4,6 +4,7 @@ Accounts views — authentication endpoints.
 
 import logging
 
+from axes.handlers.proxy import AxesProxyHandler
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
@@ -320,9 +321,19 @@ class LoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
     def post(self, request, *args, **kwargs):
+        email = request.data.get("email", "").strip().lower()
+
+        # Pre-check lockout before attempting authentication so that axes
+        # cannot be bypassed by SimpleJWT raising AuthenticationFailed first.
+        if AxesProxyHandler.is_locked(request, credentials={"username": email}):
+            return APIResponse.error(
+                message=("Too many failed login attempts. " "Try again in 15 minutes."),
+                code=ErrorCode.ACCOUNT_LOCKED,
+                status_code=429,
+            )
+
         # Pre-check: if the user exists but hasn't verified email, return 403
         # before JWT auth so the unverified message is always shown.
-        email = request.data.get("email", "").strip().lower()
         try:
             user = User.objects.get(email=email)
             if not user.is_email_verified:

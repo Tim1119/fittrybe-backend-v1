@@ -308,6 +308,40 @@ class TestLoginView:
         )
         assert resp.status_code == status.HTTP_401_UNAUTHORIZED
 
+    def test_locked_after_three_failed_attempts_returns_429(self, api_client):
+        user = UserFactory()
+        for _ in range(3):
+            api_client.post(
+                self.URL,
+                {"email": user.email, "password": "WrongPassword!"},
+                format="json",
+            )
+        resp = api_client.post(
+            self.URL,
+            {"email": user.email, "password": "WrongPassword!"},
+            format="json",
+        )
+        assert resp.status_code == 429
+        assert resp.data["code"] == "ACCOUNT_LOCKED"
+
+    def test_login_succeeds_after_axes_reset(self, api_client):
+        from axes.models import AccessAttempt
+
+        user = UserFactory()
+        for _ in range(3):
+            api_client.post(
+                self.URL,
+                {"email": user.email, "password": "WrongPassword!"},
+                format="json",
+            )
+        AccessAttempt.objects.all().delete()
+        resp = api_client.post(
+            self.URL,
+            {"email": user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+
 
 # ---------------------------------------------------------------------------
 # Logout

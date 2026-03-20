@@ -317,10 +317,9 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 # ---------------------------------------------------------------------------
 AXES_FAILURE_LIMIT = 3
 AXES_COOLOFF_TIME = 0.25  # 15 minutes
-# AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True
 AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 AXES_RESET_ON_SUCCESS = True
-# AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
+AXES_LOCKOUT_CALLABLE = "apps.accounts.utils.axes_lockout_response"
 
 # ---------------------------------------------------------------------------
 # Rate limiting
