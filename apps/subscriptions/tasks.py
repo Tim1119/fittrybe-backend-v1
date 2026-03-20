@@ -113,6 +113,7 @@ def _send_trial_reminder_email(user, days_remaining, trial_end):
     web_url = f"{settings.FRONTEND_URL}/subscription/upgrade/"
     mobile_url = f"{mobile_scheme}subscription/upgrade"
     context = {
+        "user": user,
         "user_email": user.email,
         "days_remaining": days_remaining,
         "trial_end": trial_end,
@@ -149,6 +150,7 @@ def _send_grace_warning_email(user, grace_period_end):
     web_url = f"{settings.FRONTEND_URL}/subscription/upgrade/"
     mobile_url = f"{mobile_scheme}subscription/upgrade"
     context = {
+        "user": user,
         "user_email": user.email,
         "grace_period_end": grace_period_end,
         "web_url": web_url,
