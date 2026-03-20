@@ -339,10 +339,11 @@ MOBILE_URL = env("MOBILE_URL", default="fittrybe://")
 # ---------------------------------------------------------------------------
 PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")
 PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY", default="")
+
 STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
 STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
-PAYSTACK_WEBHOOK_SECRET = env("PAYSTACK_WEBHOOK_SECRET", default="")
+
 
 # ---------------------------------------------------------------------------
 # Celery Beat — scheduled tasks

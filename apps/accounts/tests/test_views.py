@@ -45,14 +45,20 @@ class TestRegisterView:
     URL = "/api/v1/auth/register/"
 
     def _payload(self, **kw):
+        role = kw.get("role", "trainer")
         defaults = {
             "email": "new@example.com",
             "password": STRONG,
             "confirm_password": STRONG,
-            "role": "trainer",
-            "display_name": "Test Trainer",
+            "role": role,
+            "display_name": "Test User",
             "terms_accepted": True,
         }
+        if role == "trainer":
+            defaults["full_name"] = "Test Trainer Full"
+        elif role == "gym":
+            defaults["gym_name"] = "Test Gym"
+            defaults["admin_full_name"] = "Admin User"
         defaults.update(kw)
         return defaults
 
@@ -63,7 +69,12 @@ class TestRegisterView:
     def test_register_gym_returns_201(self, api_client):
         resp = api_client.post(
             self.URL,
-            self._payload(email="gym@example.com", role="gym"),
+            self._payload(
+                email="gym@example.com",
+                role="gym",
+                gym_name="Fit Gym",
+                admin_full_name="Gym Admin",
+            ),
             format="json",
         )
         assert resp.status_code == status.HTTP_201_CREATED
@@ -75,6 +86,18 @@ class TestRegisterView:
             format="json",
         )
         assert resp.status_code == status.HTTP_201_CREATED
+
+    def test_trainer_missing_full_name_returns_400(self, api_client):
+        payload = self._payload()
+        payload.pop("full_name")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_gym_missing_gym_name_returns_400(self, api_client):
+        payload = self._payload(email="gymx@example.com", role="gym")
+        payload.pop("gym_name")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_duplicate_email_returns_400(self, api_client):
         UserFactory(email="dup@example.com")
@@ -111,7 +134,12 @@ class TestRegisterView:
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_gym_missing_terms_accepted_returns_400(self, api_client):
-        payload = self._payload(email="gym2@example.com", role="gym")
+        payload = self._payload(
+            email="gym2@example.com",
+            role="gym",
+            gym_name="Gym 2",
+            admin_full_name="Admin",
+        )
         payload.pop("terms_accepted")
         resp = api_client.post(self.URL, payload, format="json")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
@@ -129,7 +157,7 @@ class TestRegisterView:
 
         resp = api_client.post(
             self.URL,
-            self._payload(display_name="Jane Trainer"),
+            self._payload(display_name="Jane Trainer", full_name="Jane Full Name"),
             format="json",
         )
         assert resp.status_code == status.HTTP_201_CREATED

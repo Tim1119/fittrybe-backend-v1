@@ -73,46 +73,88 @@ def _validate_terms_accepted(value):
 
 class TrainerRegisterSerializer(RegisterSerializer):
     display_name = serializers.CharField(max_length=100)
+    full_name = serializers.CharField(max_length=200)
+    phone_number = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, default=""
+    )
     terms_accepted = serializers.BooleanField()
 
     def validate_terms_accepted(self, value):
         return _validate_terms_accepted(value)
 
     def create(self, validated_data):
+        from django.db import transaction
+
+        from apps.profiles.models import TrainerProfile
+
         display_name = validated_data.pop("display_name")
+        full_name = validated_data.pop("full_name")
+        phone_number = validated_data.pop("phone_number", "")
         validated_data.pop("terms_accepted")
         validated_data.pop("confirm_password")
-        user = User.objects.create_user(
-            email=validated_data["email"],
-            password=validated_data["password"],
-            role=validated_data["role"],
-            is_active=False,
-            is_email_verified=False,
-        )
-        user.display_name = display_name
-        user.terms_accepted_at = timezone.now()
-        user.save(update_fields=["display_name", "terms_accepted_at"])
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                email=validated_data["email"],
+                password=validated_data["password"],
+                role=validated_data["role"],
+                is_active=False,
+                is_email_verified=False,
+            )
+            user.display_name = display_name
+            user.terms_accepted_at = timezone.now()
+            user.save(update_fields=["display_name", "terms_accepted_at"])
+            TrainerProfile.objects.create(
+                user=user,
+                full_name=full_name,
+                phone_number=phone_number,
+            )
         return user
 
 
 class GymRegisterSerializer(RegisterSerializer):
+    gym_name = serializers.CharField(max_length=200)
+    admin_full_name = serializers.CharField(max_length=200)
+    phone_number = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, default=""
+    )
+    city = serializers.CharField(
+        max_length=100, required=False, allow_blank=True, default=""
+    )
     terms_accepted = serializers.BooleanField()
 
     def validate_terms_accepted(self, value):
         return _validate_terms_accepted(value)
 
     def create(self, validated_data):
+        from django.db import transaction
+
+        from apps.profiles.models import GymProfile
+
+        gym_name = validated_data.pop("gym_name")
+        admin_full_name = validated_data.pop("admin_full_name")
+        phone_number = validated_data.pop("phone_number", "")
+        city = validated_data.pop("city", "")
         validated_data.pop("terms_accepted")
         validated_data.pop("confirm_password")
-        user = User.objects.create_user(
-            email=validated_data["email"],
-            password=validated_data["password"],
-            role=validated_data["role"],
-            is_active=False,
-            is_email_verified=False,
-        )
-        user.terms_accepted_at = timezone.now()
-        user.save(update_fields=["terms_accepted_at"])
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                email=validated_data["email"],
+                password=validated_data["password"],
+                role=validated_data["role"],
+                is_active=False,
+                is_email_verified=False,
+            )
+            user.terms_accepted_at = timezone.now()
+            user.save(update_fields=["terms_accepted_at"])
+            GymProfile.objects.create(
+                user=user,
+                gym_name=gym_name,
+                admin_full_name=admin_full_name,
+                contact_phone=phone_number,
+                city=city,
+            )
         return user
 
 
@@ -124,19 +166,29 @@ class ClientRegisterSerializer(RegisterSerializer):
         return _validate_terms_accepted(value)
 
     def create(self, validated_data):
+        from django.db import transaction
+
+        from apps.profiles.models import ClientProfile
+
         display_name = validated_data.pop("display_name")
         validated_data.pop("terms_accepted")
         validated_data.pop("confirm_password")
-        user = User.objects.create_user(
-            email=validated_data["email"],
-            password=validated_data["password"],
-            role=validated_data["role"],
-            is_active=False,
-            is_email_verified=False,
-        )
-        user.display_name = display_name
-        user.terms_accepted_at = timezone.now()
-        user.save(update_fields=["display_name", "terms_accepted_at"])
+
+        with transaction.atomic():
+            user = User.objects.create_user(
+                email=validated_data["email"],
+                password=validated_data["password"],
+                role=validated_data["role"],
+                is_active=False,
+                is_email_verified=False,
+            )
+            user.display_name = display_name
+            user.terms_accepted_at = timezone.now()
+            user.save(update_fields=["display_name", "terms_accepted_at"])
+            ClientProfile.objects.create(
+                user=user,
+                display_name=user.display_name,
+            )
         return user
 
 

@@ -95,10 +95,17 @@ _ROLE_SERIALIZER_MAP = {
         "Create a new trainer, gym, or client account. "
         "Sends a verification email upon success. "
         "Rate limited to 5 registrations per hour per IP.\n\n"
-        "**Role-specific required fields:**\n"
-        "- `trainer`: `display_name`, `terms_accepted`\n"
-        "- `gym`: `terms_accepted`\n"
-        "- `client`: `display_name`, `terms_accepted`"
+        "**Role: `trainer`** — required fields: "
+        "`email`, `password`, `confirm_password`, `display_name`, "
+        "`full_name`, `terms_accepted`; "
+        "optional: `phone_number`.\n\n"
+        "**Role: `gym`** — required fields: "
+        "`email`, `password`, `confirm_password`, `gym_name`, "
+        "`admin_full_name`, `terms_accepted`; "
+        "optional: `phone_number`, `city`.\n\n"
+        "**Role: `client`** — required fields: "
+        "`email`, `password`, `confirm_password`, `display_name`, "
+        "`terms_accepted`."
     ),
     request=inline_serializer(
         name="RegisterRequest",
@@ -109,10 +116,26 @@ _ROLE_SERIALIZER_MAP = {
             "role": drf_serializers.ChoiceField(choices=User.Role.choices),
             "display_name": drf_serializers.CharField(
                 required=False,
-                help_text="Required for trainer and client roles",
+                help_text="Trainer and client: public display name",
+            ),
+            "full_name": drf_serializers.CharField(
+                required=False,
+                help_text="Trainer only: full legal name used on profile",
+            ),
+            "gym_name": drf_serializers.CharField(
+                required=False, help_text="Gym only: official gym name"
+            ),
+            "admin_full_name": drf_serializers.CharField(
+                required=False, help_text="Gym only: full name of the admin"
+            ),
+            "phone_number": drf_serializers.CharField(
+                required=False, help_text="Trainer / gym: contact phone"
+            ),
+            "city": drf_serializers.CharField(
+                required=False, help_text="Gym only: city of operation"
             ),
             "terms_accepted": drf_serializers.BooleanField(
-                help_text="Must be true to complete registration"
+                help_text="Must be true — user accepts the terms of service"
             ),
         },
     ),
@@ -122,7 +145,7 @@ _ROLE_SERIALIZER_MAP = {
         ),
         400: OpenApiResponse(
             description="Validation error — invalid data, duplicate email, "
-            "weak password, or terms not accepted"
+            "weak password, missing role-specific field, or terms not accepted"
         ),
         429: OpenApiResponse(description="Rate limit exceeded"),
     },
