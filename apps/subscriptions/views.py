@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
     ),
     responses={
         200: OpenApiResponse(
-            description="List of active plans with pricing and feature details"
+            response=PlanConfigSerializer(many=True),
+            description="List of active plans with pricing and feature details",
         ),
     },
     tags=["Subscriptions"],
@@ -71,7 +72,8 @@ class PlansView(APIView):
     ),
     responses={
         200: OpenApiResponse(
-            description="Subscription record with status and period details"
+            response=SubscriptionSerializer,
+            description="Subscription record with status and period details",
         ),
         401: OpenApiResponse(description="Not authenticated"),
         403: OpenApiResponse(description="Client accounts do not have subscriptions"),
@@ -111,7 +113,14 @@ class SubscriptionStatusView(APIView):
     request=inline_serializer(name="PaystackCheckoutRequest", fields={}),
     responses={
         200: OpenApiResponse(
-            description="Transaction initialized — authorization_url and reference"
+            response=inline_serializer(
+                name="PaystackCheckoutResponse",
+                fields={
+                    "authorization_url": drf_serializers.URLField(),
+                    "reference": drf_serializers.CharField(),
+                },
+            ),
+            description="Transaction initialized — redirect user to authorization_url",
         ),
         401: OpenApiResponse(description="Not authenticated"),
         403: OpenApiResponse(description="Only trainer and gym accounts can subscribe"),
@@ -177,7 +186,11 @@ class PaystackCheckoutView(APIView):
     ),
     responses={
         200: OpenApiResponse(
-            description="Checkout session created — returns checkout_url"
+            response=inline_serializer(
+                name="StripeCheckoutResponse",
+                fields={"checkout_url": drf_serializers.URLField()},
+            ),
+            description="Checkout session created — redirect user to checkout_url",
         ),
         400: OpenApiResponse(description="price_id is required"),
         401: OpenApiResponse(description="Not authenticated"),
@@ -457,7 +470,11 @@ class StripeWebhookView(APIView):
     request=inline_serializer(name="CancelSubscriptionRequest", fields={}),
     responses={
         200: OpenApiResponse(
-            description="Subscription cancelled — returns cancelled_at timestamp"
+            response=inline_serializer(
+                name="CancelSubscriptionResponse",
+                fields={"cancelled_at": drf_serializers.DateTimeField()},
+            ),
+            description="Subscription cancelled — returns cancelled_at timestamp",
         ),
         401: OpenApiResponse(description="Not authenticated"),
         403: OpenApiResponse(description="Only trainer and gym accounts can cancel"),
@@ -496,7 +513,8 @@ class CancelSubscriptionView(APIView):
     ),
     responses={
         200: OpenApiResponse(
-            description="Paginated payment record list (empty list if no history)"
+            response=PaymentRecordSerializer(many=True),
+            description="Paginated payment record list (empty list if no history)",
         ),
         401: OpenApiResponse(description="Not authenticated"),
         403: OpenApiResponse(

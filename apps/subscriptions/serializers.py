@@ -2,6 +2,7 @@
 Subscription serializers.
 """
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.subscriptions.models import PaymentRecord, PlanConfig, Subscription
@@ -50,12 +51,15 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    @extend_schema_field(serializers.BooleanField())
     def get_is_trial(self, obj):
         return obj.is_trial_active()
 
+    @extend_schema_field(serializers.IntegerField())
     def get_days_remaining(self, obj):
         return obj.days_remaining_in_trial()
 
+    @extend_schema_field(serializers.BooleanField())
     def get_is_access_allowed(self, obj):
         return obj.is_access_allowed()
 
