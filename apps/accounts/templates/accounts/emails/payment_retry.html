@@ -1,0 +1,64 @@
+{% extends "accounts/emails/base_email.html" %}
+
+{% block title %}Fit Trybe Payment Failed — We Will Retry{% endblock %}
+
+{% block banner %}
+<tr>
+  <td style="background-color:#1A1A2E;padding:32px 40px;text-align:center;">
+    <p style="font-size:32px;margin:0 0 8px;">&#128679;</p>
+    <h1 style="color:#F59E0B;font-size:22px;margin:0;font-weight:bold;">
+      Payment Failed — We Will Retry
+    </h1>
+  </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<h2 style="color:#1A1A2E;font-size:20px;margin:0 0 16px;">
+  Hi {{ user_name }}, your payment could not be processed
+</h2>
+<p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 20px;">
+  Your payment for your Fit Trybe subscription failed
+  (attempt {{ retry_count }}). Don't worry — we will automatically retry.
+</p>
+<div style="border-left:4px solid #F59E0B;padding:12px 16px;background-color:#FFFBEB;
+            border-radius:0 4px 4px 0;margin:0 0 20px;">
+  <p style="color:#374151;font-size:13px;margin:0;line-height:1.5;">
+    Next retry: <strong>{{ next_retry_at|date:"F j, Y" }}</strong>.
+    To avoid any interruption, please update your payment method before then.
+  </p>
+</div>
+<p style="color:#374151;font-size:14px;line-height:1.6;margin:0;">
+  Your account remains active while we retry. If payment continues to fail,
+  your account will enter a grace period.
+</p>
+{% endblock %}
+
+{% block cta %}
+<tr>
+  <td style="padding:0 40px 32px;text-align:center;">
+    <!-- Primary: update payment in browser -->
+    <a href="{{ web_url }}"
+       style="display:inline-block;background-color:#F59E0B;color:#FFFFFF;
+              text-decoration:none;padding:14px 36px;border-radius:8px;
+              font-size:15px;font-weight:bold;letter-spacing:0.5px;margin-bottom:12px;">
+      Update Payment Method
+    </a>
+    <br>
+    <!-- Secondary: open in app -->
+    <a href="{{ mobile_url }}"
+       style="display:inline-block;background-color:transparent;color:#F59E0B;
+              text-decoration:none;padding:12px 36px;border-radius:8px;
+              font-size:14px;font-weight:bold;letter-spacing:0.5px;
+              border:2px solid #F59E0B;">
+      Open in App
+    </a>
+    <p style="margin:16px 0 0;">
+      <a href="mailto:support@fittrybe.com"
+         style="color:#6B7280;font-size:13px;text-decoration:underline;">
+        Contact Support
+      </a>
+    </p>
+  </td>
+</tr>
+{% endblock %}

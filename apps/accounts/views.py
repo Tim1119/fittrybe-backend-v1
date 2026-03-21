@@ -189,22 +189,23 @@ class RegisterView(APIView):
         serializer_class = _ROLE_SERIALIZER_MAP.get(role, RegisterSerializer)
         serializer = serializer_class(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return APIResponse.error(
+                message="Registration failed.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
 
         user = serializer.save()
 
         send_verification_email_task.delay(str(user.id))
 
-        return Response(
-            {
-                "message": (
-                    "Registration successful. Please check your email to verify "
-                    "your account."
-                ),
-                "email": user.email,
-                "role": user.role,
-            },
-            status=status.HTTP_201_CREATED,
+        return APIResponse.created(
+            data={"email": user.email, "role": user.role},
+            message=(
+                "Registration successful. Please check your email to verify "
+                "your account."
+            ),
         )
 
 
@@ -247,23 +248,26 @@ class VerifyEmailView(APIView):
 
         uid = _decode_uid(uid_param)
         if uid is None:
-            return Response(
-                {"error": "Invalid verification link."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return APIResponse.error(
+                message="Invalid verification link.",
+                code=ErrorCode.TOKEN_INVALID,
+                status_code=400,
             )
 
         try:
             user = User.objects.get(pk=uid)
         except (User.DoesNotExist, Exception):
-            return Response(
-                {"error": "Invalid verification link."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return APIResponse.error(
+                message="Invalid verification link.",
+                code=ErrorCode.TOKEN_INVALID,
+                status_code=400,
             )
 
         if not account_token_generator.check_token(user, token):
-            return Response(
-                {"error": "Verification link is invalid or has expired."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return APIResponse.error(
+                message="Verification link is invalid or has expired.",
+                code=ErrorCode.TOKEN_INVALID,
+                status_code=400,
             )
 
         user.is_active = True
@@ -285,9 +289,8 @@ class VerifyEmailView(APIView):
         except Exception:
             logger.exception("Failed to send welcome email to %s", user.email)
 
-        return Response(
-            {"message": "Email verified successfully. Welcome to Fit Trybe!"},
-            status=status.HTTP_200_OK,
+        return APIResponse.success(
+            message="Email verified successfully. Welcome to Fit Trybe!"
         )
 
 
@@ -337,14 +340,13 @@ class LoginView(TokenObtainPairView):
         try:
             user = User.objects.get(email=email)
             if not user.is_email_verified:
-                return Response(
-                    {
-                        "error": (
-                            "Please verify your email before logging in. "
-                            "Check your inbox for the verification link."
-                        )
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
+                return APIResponse.error(
+                    message=(
+                        "Please verify your email before logging in. "
+                        "Check your inbox for the verification link."
+                    ),
+                    code=ErrorCode.ACCOUNT_NOT_VERIFIED,
+                    status_code=403,
                 )
         except User.DoesNotExist:
             pass
@@ -355,7 +357,11 @@ class LoginView(TokenObtainPairView):
             try:
                 user = User.objects.get(email=email)
             except User.DoesNotExist:
-                return response
+                return APIResponse.error(
+                    message="Invalid email or password.",
+                    code=ErrorCode.INVALID_CREDENTIALS,
+                    status_code=401,
+                )
 
             is_first = user.is_first_login
             if is_first:
@@ -374,7 +380,11 @@ class LoginView(TokenObtainPairView):
                 message="Login successful.",
             )
 
-        return response
+        return APIResponse.error(
+            message="Invalid email or password.",
+            code=ErrorCode.INVALID_CREDENTIALS,
+            status_code=response.status_code,
+        )
 
 
 @extend_schema(
@@ -402,21 +412,21 @@ class LogoutView(APIView):
     def post(self, request):
         refresh_token = request.data.get("refresh")
         if not refresh_token:
-            return Response(
-                {"error": "Refresh token is required."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return APIResponse.error(
+                message="Refresh token is required.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
             )
         try:
             token = RefreshToken(refresh_token)
             token.blacklist()
         except TokenError:
-            return Response(
-                {"error": "Token is invalid or expired."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return APIResponse.error(
+                message="Token is invalid or expired.",
+                code=ErrorCode.TOKEN_INVALID,
+                status_code=400,
             )
-        return Response(
-            {"message": "Logged out successfully."}, status=status.HTTP_200_OK
-        )
+        return APIResponse.success(message="Logged out successfully.")
 
 
 @extend_schema(
@@ -453,14 +463,11 @@ class ForgotPasswordView(APIView):
             except User.DoesNotExist:
                 pass
 
-        return Response(
-            {
-                "message": (
-                    "If this email exists, you will receive a password reset "
-                    "link shortly."
-                )
-            },
-            status=status.HTTP_200_OK,
+        return APIResponse.success(
+            message=(
+                "If this email exists, you will receive a password reset "
+                "link shortly."
+            )
         )
 
 
@@ -489,29 +496,37 @@ class ResetPasswordView(APIView):
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return APIResponse.error(
+                message="Password reset failed.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
 
         uid = _decode_uid(serializer.validated_data["uid"])
         token = serializer.validated_data["token"]
 
         if uid is None:
-            return Response(
-                {"error": "Invalid reset link."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return APIResponse.error(
+                message="Invalid reset link.",
+                code=ErrorCode.TOKEN_INVALID,
+                status_code=400,
             )
 
         try:
             user = User.objects.get(pk=uid)
         except (User.DoesNotExist, Exception):
-            return Response(
-                {"error": "Invalid reset link."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return APIResponse.error(
+                message="Invalid reset link.",
+                code=ErrorCode.TOKEN_INVALID,
+                status_code=400,
             )
 
         if not PasswordResetTokenGenerator().check_token(user, token):
-            return Response(
-                {"error": "Reset link is invalid or has expired."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return APIResponse.error(
+                message="Reset link is invalid or has expired.",
+                code=ErrorCode.TOKEN_INVALID,
+                status_code=400,
             )
 
         user.set_password(serializer.validated_data["new_password"])
@@ -522,14 +537,11 @@ class ResetPasswordView(APIView):
         except Exception:
             logger.exception("Failed to send password-changed email to %s", user.email)
 
-        return Response(
-            {
-                "message": (
-                    "Password reset successfully. You can now log in with your "
-                    "new password."
-                )
-            },
-            status=status.HTTP_200_OK,
+        return APIResponse.success(
+            message=(
+                "Password reset successfully. You can now log in with your "
+                "new password."
+            )
         )
 
 
@@ -558,13 +570,19 @@ class ChangePasswordView(APIView):
         serializer = ChangePasswordSerializer(data=request.data)
 
         if not user.check_password(request.data.get("old_password", "")):
-            return Response(
-                {"error": "Old password is incorrect."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return APIResponse.error(
+                message="Old password is incorrect.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
             )
 
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return APIResponse.error(
+                message="Password change failed.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
 
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password"])
@@ -574,10 +592,7 @@ class ChangePasswordView(APIView):
         except Exception:
             logger.exception("Failed to send password-changed email to %s", user.email)
 
-        return Response(
-            {"message": "Password changed successfully."},
-            status=status.HTTP_200_OK,
-        )
+        return APIResponse.success(message="Password changed successfully.")
 
 
 @extend_schema(
