@@ -341,7 +341,7 @@ PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY", default="")
 
 STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
-STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
+STRIPE_WEBHOOK_SECRET = ""
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +357,14 @@ CELERY_BEAT_SCHEDULE = {
     "check-grace-period-expirations": {
         "task": "apps.subscriptions.tasks.check_grace_period_expirations",
         "schedule": crontab(minute="30"),
+    },
+    "check-active-subscription-expirations": {
+        "task": "apps.subscriptions.tasks.check_active_subscription_expirations",
+        "schedule": crontab(minute="15"),
+    },
+    "process-payment-retries": {
+        "task": "apps.subscriptions.tasks.process_payment_retries",
+        "schedule": crontab(minute="45"),
     },
 }
 

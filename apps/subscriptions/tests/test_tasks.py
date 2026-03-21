@@ -8,10 +8,15 @@ from django.utils import timezone
 
 from apps.subscriptions.models import Subscription
 from apps.subscriptions.tasks import (
+    check_active_subscription_expirations,
     check_grace_period_expirations,
     check_trial_expirations,
+    process_payment_retries,
 )
-from apps.subscriptions.tests.factories import SubscriptionFactory
+from apps.subscriptions.tests.factories import (
+    ActiveSubscriptionFactory,
+    SubscriptionFactory,
+)
 
 
 @pytest.mark.django_db
@@ -89,3 +94,68 @@ class TestCheckGracePeriodExpirations:
         self._expired_grace()
         result = check_grace_period_expirations()
         assert result == 2
+
+
+@pytest.mark.django_db
+class TestCheckActiveSubscriptionExpirations:
+    def _expired_active(self):
+        sub = ActiveSubscriptionFactory()
+        sub.current_period_end = timezone.now() - timedelta(hours=1)
+        sub.save(update_fields=["current_period_end"])
+        return sub
+
+    def test_moves_expired_active_sub_to_grace(self):
+        sub = self._expired_active()
+        check_active_subscription_expirations()
+        sub.refresh_from_db()
+        assert sub.status == Subscription.Status.GRACE
+        assert sub.grace_period_end is not None
+
+    def test_ignores_active_subs_not_yet_expired(self):
+        sub = ActiveSubscriptionFactory()
+        check_active_subscription_expirations()
+        sub.refresh_from_db()
+        assert sub.status == Subscription.Status.ACTIVE
+
+    def test_sends_grace_warning_email(self):
+        self._expired_active()
+        with patch("apps.subscriptions.tasks._send_grace_warning_email") as mock_send:
+            check_active_subscription_expirations()
+        mock_send.assert_called_once()
+
+    def test_returns_count_of_moved_subscriptions(self):
+        self._expired_active()
+        self._expired_active()
+        result = check_active_subscription_expirations()
+        assert result == 2
+
+
+@pytest.mark.django_db
+class TestProcessPaymentRetries:
+    def _due_retry_sub(self, retry_count=1):
+        sub = ActiveSubscriptionFactory(
+            payment_retry_count=retry_count,
+            next_payment_retry_at=timezone.now() - timedelta(hours=1),
+        )
+        return sub
+
+    def test_schedules_next_retry_for_due_subscription(self):
+        sub = self._due_retry_sub(retry_count=1)
+        process_payment_retries()
+        sub.refresh_from_db()
+        assert sub.payment_retry_count == 2
+
+    def test_enters_grace_when_max_retries_exceeded(self):
+        sub = self._due_retry_sub(retry_count=3)
+        process_payment_retries()
+        sub.refresh_from_db()
+        assert sub.status == Subscription.Status.GRACE
+
+    def test_ignores_subscriptions_not_yet_due(self):
+        sub = ActiveSubscriptionFactory(
+            payment_retry_count=1,
+            next_payment_retry_at=timezone.now() + timedelta(days=2),
+        )
+        process_payment_retries()
+        sub.refresh_from_db()
+        assert sub.payment_retry_count == 1
