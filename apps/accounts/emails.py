@@ -168,6 +168,37 @@ def send_account_locked_email(user):
     email.send(fail_silently=False)
 
 
+def send_subscription_locked_email(user):
+    web_url = f"{settings.FRONTEND_URL}/subscription/upgrade/"
+    mobile_url = f"{_mobile_url()}subscription/upgrade"
+    context = {
+        "user": user,
+        "user_name": get_user_name(user),
+        "user_email": user.email,
+        "web_url": web_url,
+        "mobile_url": mobile_url,
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": _logo_url(),
+    }
+    html_content = render_to_string("accounts/emails/subscription_locked.html", context)
+    text_content = (
+        f"Hi {get_user_name(user)},\n\n"
+        f"Your Fit Trybe subscription has expired "
+        f"and your account has been locked.\n\n"
+        f"Renew your subscription to restore access:\n"
+        f"  In browser: {web_url}\n"
+        f"  In app:     {mobile_url}"
+    )
+    email = EmailMultiAlternatives(
+        subject="Your Fit Trybe subscription has expired",
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
+
+
 def send_password_changed_email(user):
     token = PasswordResetTokenGenerator().make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))

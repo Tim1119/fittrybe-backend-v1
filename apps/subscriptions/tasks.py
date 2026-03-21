@@ -42,9 +42,9 @@ def check_grace_period_expirations():
     for sub in expired:
         sub.lock()
         try:
-            from apps.accounts.emails import send_account_locked_email
+            from apps.accounts.emails import send_subscription_locked_email
 
-            send_account_locked_email(sub.user)
+            send_subscription_locked_email(sub.user)
         except Exception:
             logger.exception("Failed to send locked email to %s", sub.user.email)
         count += 1

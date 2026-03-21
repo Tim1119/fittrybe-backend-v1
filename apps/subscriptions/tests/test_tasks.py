@@ -80,7 +80,7 @@ class TestCheckGracePeriodExpirations:
 
     def test_sends_locked_email_directly_after_locking(self):
         self._expired_grace()
-        with patch("apps.accounts.emails.send_account_locked_email") as mock_send:
+        with patch("apps.accounts.emails.send_subscription_locked_email") as mock_send:
             check_grace_period_expirations()
         mock_send.assert_called_once()
 
