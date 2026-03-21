@@ -22,7 +22,7 @@ def check_trial_expirations():
     count = 0
     for sub in expired:
         sub.enter_grace_period()
-        send_grace_period_warning.delay(sub.id)
+        _send_grace_warning_email(sub.user, sub.grace_period_end)
         count += 1
 
     logger.info("Moved %d trial subscriptions to grace period.", count)
@@ -41,7 +41,12 @@ def check_grace_period_expirations():
     count = 0
     for sub in expired:
         sub.lock()
-        send_subscription_locked_email.delay(sub.id)
+        try:
+            from apps.accounts.emails import send_account_locked_email
+
+            send_account_locked_email(sub.user)
+        except Exception:
+            logger.exception("Failed to send locked email to %s", sub.user.email)
         count += 1
 
     logger.info("Locked %d subscriptions after grace period.", count)

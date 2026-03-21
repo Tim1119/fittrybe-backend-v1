@@ -37,13 +37,11 @@ class TestCheckTrialExpirations:
         sub.refresh_from_db()
         assert sub.status == Subscription.Status.TRIAL
 
-    def test_dispatches_grace_period_warning_email(self):
+    def test_sends_grace_warning_email_directly(self):
         self._expired_trial()
-        with patch(
-            "apps.subscriptions.tasks.send_grace_period_warning.delay"
-        ) as mock_delay:
+        with patch("apps.subscriptions.tasks._send_grace_warning_email") as mock_send:
             check_trial_expirations()
-        mock_delay.assert_called_once()
+        mock_send.assert_called_once()
 
     def test_returns_count_of_moved_subscriptions(self):
         self._expired_trial()
@@ -80,34 +78,14 @@ class TestCheckGracePeriodExpirations:
         sub.refresh_from_db()
         assert sub.status == Subscription.Status.GRACE
 
-    def test_dispatches_locked_email_after_locking(self):
+    def test_sends_locked_email_directly_after_locking(self):
         self._expired_grace()
-        with patch(
-            "apps.subscriptions.tasks.send_subscription_locked_email.delay"
-        ) as mock_delay:
+        with patch("apps.accounts.emails.send_account_locked_email") as mock_send:
             check_grace_period_expirations()
-        mock_delay.assert_called_once()
+        mock_send.assert_called_once()
 
     def test_returns_count_of_locked_subscriptions(self):
         self._expired_grace()
         self._expired_grace()
         result = check_grace_period_expirations()
         assert result == 2
-
-
-@pytest.mark.django_db
-class TestSendSubscriptionLockedEmail:
-    def test_calls_send_account_locked_email(self):
-        from apps.subscriptions.tasks import send_subscription_locked_email
-        from apps.subscriptions.tests.factories import SubscriptionFactory
-
-        sub = SubscriptionFactory(status=Subscription.Status.LOCKED)
-        with patch("apps.accounts.emails.send_account_locked_email") as mock_email:
-            send_subscription_locked_email(sub.id)
-        mock_email.assert_called_once_with(sub.user)
-
-    def test_handles_missing_subscription_gracefully(self):
-        from apps.subscriptions.tasks import send_subscription_locked_email
-
-        # Should not raise
-        send_subscription_locked_email(99999)

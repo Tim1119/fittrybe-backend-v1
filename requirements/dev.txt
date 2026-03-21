@@ -14,3 +14,4 @@ flake8
 isort
 pre-commit
 ipython
+flower
