@@ -144,14 +144,17 @@ class PaystackCheckoutView(APIView):
 
         amount_kobo = int(plan.price_ngn * 100)
         gateway = PaystackGateway()
-        result = gateway.initialize_transaction(
-            email=request.user.email,
-            amount_kobo=amount_kobo,
-            metadata={
-                "user_id": str(request.user.id),
-                "plan": plan.plan,
-            },
+        metadata = {
+            "user_id": str(request.user.id),
+            "plan": plan.plan,
+            "cancel_action": f"{request.build_absolute_uri('/')}subscription/",
+        }
+        kwargs = dict(
+            email=request.user.email, amount_kobo=amount_kobo, metadata=metadata
         )
+        if plan.paystack_plan_code:
+            kwargs["plan"] = plan.paystack_plan_code
+        result = gateway.initialize_transaction(**kwargs)
         if result.get("status"):
             return APIResponse.success(
                 data={
@@ -173,17 +176,11 @@ class PaystackCheckoutView(APIView):
     summary="Initialize Stripe checkout",
     description=(
         "Creates a Stripe checkout session for the authenticated trainer or gym. "
-        "Requires a Stripe price_id for the chosen plan. "
+        "The Stripe price is determined from the user's role via "
+        "PlanConfig.stripe_price_id. "
         "Returns a checkout_url to redirect the user to Stripe's hosted payment page."
     ),
-    request=inline_serializer(
-        name="StripeCheckoutRequest",
-        fields={
-            "price_id": drf_serializers.CharField(
-                help_text="Stripe price ID, e.g. price_1ABC..."
-            )
-        },
-    ),
+    request=inline_serializer(name="StripeCheckoutRequest", fields={}),
     responses={
         200: OpenApiResponse(
             response=inline_serializer(
@@ -192,9 +189,10 @@ class PaystackCheckoutView(APIView):
             ),
             description="Checkout session created — redirect user to checkout_url",
         ),
-        400: OpenApiResponse(description="price_id is required"),
+        400: OpenApiResponse(description="Stripe not configured for this plan"),
         401: OpenApiResponse(description="Not authenticated"),
         403: OpenApiResponse(description="Only trainer and gym accounts can subscribe"),
+        404: OpenApiResponse(description="No active plan configured for this role"),
         502: OpenApiResponse(description="Stripe API error"),
     },
     tags=["Subscriptions"],
@@ -203,10 +201,20 @@ class StripeCheckoutView(APIView):
     permission_classes = [IsAuthenticated, IsTrainerOrGym]
 
     def post(self, request):
-        price_id = request.data.get("price_id", "")
-        if not price_id:
+        try:
+            plan = PlanConfig.get_for_role(request.user.role)
+        except PlanConfig.DoesNotExist:
             return APIResponse.error(
-                message="price_id is required.",
+                message="No active plan found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        if not plan.stripe_price_id:
+            return APIResponse.error(
+                message=(
+                    "Stripe not configured for this plan. " "Please contact support."
+                ),
                 code=ErrorCode.VALIDATION_ERROR,
             )
 
@@ -218,7 +226,7 @@ class StripeCheckoutView(APIView):
             )
             session = gateway.create_checkout_session(
                 customer_id=customer.id,
-                price_id=price_id,
+                price_id=plan.stripe_price_id,
                 success_url=f"{request.build_absolute_uri('/')}subscription/success",
                 cancel_url=f"{request.build_absolute_uri('/')}subscription/cancel",
             )
@@ -284,14 +292,20 @@ class PaystackWebhookView(APIView):
         return APIResponse.success(message="Webhook received.")
 
     def _handle_event(self, event_type, data):
-        user_id = data.get("metadata", {}).get("user_id")
+        user_id = (
+            data.get("metadata", {}).get("user_id") if isinstance(data, dict) else None
+        )
 
         if event_type == "charge.success":
             self._handle_charge_success(data, user_id)
+        elif event_type == "subscription.create":
+            self._handle_subscription_create(data, user_id)
         elif event_type == "subscription.disable":
             self._handle_subscription_disable(data, user_id)
         elif event_type == "invoice.payment_failed":
             self._handle_payment_failed(data, user_id)
+        elif event_type == "subscription.expiring_cards":
+            self._handle_expiring_cards(data)
 
     def _handle_charge_success(self, data, user_id):
         if not user_id:
@@ -308,6 +322,7 @@ class PaystackWebhookView(APIView):
             provider=Subscription.Provider.PAYSTACK,
             provider_subscription_id=data.get("reference", ""),
         )
+        sub.reset_payment_retries()
         PaymentRecord.objects.get_or_create(
             provider_reference=data.get("reference", ""),
             defaults={
@@ -320,6 +335,31 @@ class PaystackWebhookView(APIView):
                 "paid_at": now,
             },
         )
+        try:
+            from apps.accounts.emails import send_subscription_activated_email
+
+            send_subscription_activated_email(sub.user, sub)
+        except Exception:
+            logger.exception("Failed to send activation email to %s", sub.user.email)
+
+    def _handle_subscription_create(self, data, user_id):
+        if not user_id:
+            return
+        try:
+            sub = Subscription.objects.get(user_id=user_id)
+            customer = data.get("customer", {})
+            sub.paystack_subscription_code = data.get("subscription_code", "")
+            sub.paystack_email_token = data.get("email_token", "")
+            sub.paystack_customer_code = customer.get("customer_code", "")
+            sub.save(
+                update_fields=[
+                    "paystack_subscription_code",
+                    "paystack_email_token",
+                    "paystack_customer_code",
+                ]
+            )
+        except Subscription.DoesNotExist:
+            pass
 
     def _handle_subscription_disable(self, data, user_id):
         if not user_id:
@@ -327,6 +367,14 @@ class PaystackWebhookView(APIView):
         try:
             sub = Subscription.objects.select_related("plan").get(user_id=user_id)
             sub.enter_grace_period()
+            try:
+                from apps.subscriptions.tasks import _send_grace_warning_email
+
+                _send_grace_warning_email(sub.user, sub.grace_period_end)
+            except Exception:
+                logger.exception(
+                    "Failed to send grace warning email to %s", sub.user.email
+                )
         except Subscription.DoesNotExist:
             pass
 
@@ -336,9 +384,35 @@ class PaystackWebhookView(APIView):
         try:
             sub = Subscription.objects.select_related("plan").get(user_id=user_id)
             if sub.status == Subscription.Status.ACTIVE:
-                sub.enter_grace_period()
+                sub.record_payment_failure()
+                try:
+                    from apps.accounts.emails import send_payment_failed_email
+
+                    send_payment_failed_email(sub.user, sub.payment_retry_count)
+                except Exception:
+                    logger.exception(
+                        "Failed to send payment failed email to %s", sub.user.email
+                    )
         except Subscription.DoesNotExist:
             pass
+
+    def _handle_expiring_cards(self, data):
+        try:
+            from apps.accounts.emails import send_card_expiring_email
+            from apps.accounts.models import User
+
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                email = item.get("customer", {}).get("email", "")
+                if not email:
+                    continue
+                try:
+                    user = User.objects.get(email=email)
+                    send_card_expiring_email(user)
+                except User.DoesNotExist:
+                    pass
+        except Exception:
+            logger.exception("Failed to handle expiring_cards event")
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +495,8 @@ class StripeWebhookView(APIView):
         if not user_id:
             return
         try:
-            sub = Subscription.objects.get(user_id=user_id)
+            sub = Subscription.objects.select_related("plan").get(user_id=user_id)
+            sub.reset_payment_retries()
             PaymentRecord.objects.get_or_create(
                 provider_reference=obj.get("id", ""),
                 defaults={
@@ -434,6 +509,14 @@ class StripeWebhookView(APIView):
                     "paid_at": timezone.now(),
                 },
             )
+            try:
+                from apps.accounts.emails import send_subscription_activated_email
+
+                send_subscription_activated_email(sub.user, sub)
+            except Exception:
+                logger.exception(
+                    "Failed to send activation email to %s", sub.user.email
+                )
         except Subscription.DoesNotExist:
             pass
 
@@ -443,7 +526,15 @@ class StripeWebhookView(APIView):
         try:
             sub = Subscription.objects.select_related("plan").get(user_id=user_id)
             if sub.status == Subscription.Status.ACTIVE:
-                sub.enter_grace_period()
+                sub.record_payment_failure()
+                try:
+                    from apps.accounts.emails import send_payment_failed_email
+
+                    send_payment_failed_email(sub.user, sub.payment_retry_count)
+                except Exception:
+                    logger.exception(
+                        "Failed to send payment failed email to %s", sub.user.email
+                    )
         except Subscription.DoesNotExist:
             pass
 
@@ -451,8 +542,8 @@ class StripeWebhookView(APIView):
         if not user_id:
             return
         try:
-            sub = Subscription.objects.get(user_id=user_id)
-            sub.lock()
+            sub = Subscription.objects.select_related("plan").get(user_id=user_id)
+            sub.enter_grace_period()
         except Subscription.DoesNotExist:
             pass
 

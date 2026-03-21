@@ -137,52 +137,45 @@ class TestSubscriptionModel:
 
 
 @pytest.mark.django_db
-class TestSchedulePaymentRetry:
-    def test_first_retry_increments_count_and_sets_3_day_window(self):
+class TestRecordPaymentFailure:
+    def test_increments_retry_count(self):
         sub = ActiveSubscriptionFactory()
-        assert sub.payment_retry_count == 0
-        sub.schedule_payment_retry()
+        sub.record_payment_failure()
         sub.refresh_from_db()
         assert sub.payment_retry_count == 1
-        expected = timezone.now() + timedelta(days=3)
-        assert abs((sub.next_payment_retry_at - expected).total_seconds()) < 5
 
-    def test_second_retry_sets_7_day_window(self):
-        sub = ActiveSubscriptionFactory(payment_retry_count=1)
-        sub.schedule_payment_retry()
-        sub.refresh_from_db()
-        assert sub.payment_retry_count == 2
-        expected = timezone.now() + timedelta(days=7)
-        assert abs((sub.next_payment_retry_at - expected).total_seconds()) < 5
-
-    def test_third_retry_enters_grace_period(self):
-        sub = ActiveSubscriptionFactory(payment_retry_count=2)
-        sub.schedule_payment_retry()
-        sub.refresh_from_db()
-        assert sub.status == Subscription.Status.GRACE
-        assert sub.grace_period_end is not None
-
-    def test_updates_last_payment_retry_at(self):
+    def test_sets_last_payment_retry_at(self):
         sub = ActiveSubscriptionFactory()
-        sub.schedule_payment_retry()
+        sub.record_payment_failure()
         sub.refresh_from_db()
         assert sub.last_payment_retry_at is not None
         assert abs((sub.last_payment_retry_at - timezone.now()).total_seconds()) < 5
 
+    def test_enters_grace_after_three_failures(self):
+        sub = ActiveSubscriptionFactory(payment_retry_count=2)
+        sub.record_payment_failure()
+        sub.refresh_from_db()
+        assert sub.status == Subscription.Status.GRACE
+        assert sub.grace_period_end is not None
+
+    def test_does_not_enter_grace_before_three_failures(self):
+        sub = ActiveSubscriptionFactory(payment_retry_count=1)
+        sub.record_payment_failure()
+        sub.refresh_from_db()
+        assert sub.status == Subscription.Status.ACTIVE
+
 
 @pytest.mark.django_db
 class TestResetPaymentRetries:
-    def test_clears_all_retry_fields(self):
+    def test_clears_retry_fields(self):
         sub = ActiveSubscriptionFactory(
             payment_retry_count=2,
             last_payment_retry_at=timezone.now(),
-            next_payment_retry_at=timezone.now() + timedelta(days=7),
         )
         sub.reset_payment_retries()
         sub.refresh_from_db()
         assert sub.payment_retry_count == 0
         assert sub.last_payment_retry_at is None
-        assert sub.next_payment_retry_at is None
 
 
 @pytest.mark.django_db

@@ -362,10 +362,6 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.subscriptions.tasks.check_active_subscription_expirations",
         "schedule": crontab(minute="15"),
     },
-    "process-payment-retries": {
-        "task": "apps.subscriptions.tasks.process_payment_retries",
-        "schedule": crontab(minute="45"),
-    },
 }
 
 # ---------------------------------------------------------------------------

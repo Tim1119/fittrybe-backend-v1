@@ -28,6 +28,23 @@ class PlanConfig(BaseModel):
     grace_period_days = models.PositiveIntegerField(default=7)
     is_active = models.BooleanField(default=True)
     features = models.JSONField(default=list)
+    paystack_plan_code = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text=(
+            "Create a plan in Paystack Dashboard → Products → Plans. "
+            "Monthly amount should match price_ngn. "
+            "Copy the plan code (PLN_xxxxxxxx) here."
+        ),
+    )
+    stripe_price_id = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text=(
+            "Create a price in Stripe Dashboard → Products → Prices. "
+            "Copy the price ID (price_xxxxxxxx) here."
+        ),
+    )
 
     class Meta:
         ordering = ["plan"]
@@ -79,6 +96,30 @@ class Subscription(BaseModel):
     provider_customer_id = models.CharField(max_length=200, blank=True)
     provider_subscription_id = models.CharField(max_length=200, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    payment_retry_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of payment failures received from Paystack/Stripe webhooks.",
+    )
+    last_payment_retry_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of the last payment failure notification.",
+    )
+    paystack_subscription_code = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Paystack subscription code, e.g. SUB_xxx",
+    )
+    paystack_email_token = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Used to manage subscription on Paystack",
+    )
+    paystack_customer_code = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Paystack customer code, e.g. CUS_xxx",
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -136,6 +177,21 @@ class Subscription(BaseModel):
         self.status = self.Status.CANCELLED
         self.cancelled_at = timezone.now()
         self.save()
+
+    def record_payment_failure(self):
+        """Increment failure count; enter grace period after 3 failures."""
+        from django.utils import timezone
+
+        self.payment_retry_count += 1
+        self.last_payment_retry_at = timezone.now()
+        self.save(update_fields=["payment_retry_count", "last_payment_retry_at"])
+        if self.payment_retry_count >= 3:
+            self.enter_grace_period()
+
+    def reset_payment_retries(self):
+        self.payment_retry_count = 0
+        self.last_payment_retry_at = None
+        self.save(update_fields=["payment_retry_count", "last_payment_retry_at"])
 
 
 class PaymentRecord(models.Model):

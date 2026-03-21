@@ -168,6 +168,40 @@ def send_account_locked_email(user):
     email.send(fail_silently=False)
 
 
+def send_subscription_activated_email(user, subscription):
+    mobile_url = _mobile_url()
+    context = {
+        "user": user,
+        "user_name": get_user_name(user),
+        "user_email": user.email,
+        "plan_name": subscription.plan.display_name,
+        "current_period_end": subscription.current_period_end,
+        "web_url": f"{settings.FRONTEND_URL}/dashboard/",
+        "mobile_url": f"{mobile_url}dashboard",
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": _logo_url(),
+    }
+    html_content = render_to_string(
+        "subscriptions/emails/subscription_activated.html", context
+    )
+    text_content = (
+        f"Hi {get_user_name(user)},\n\n"
+        f"Your Fit Trybe {subscription.plan.display_name} subscription is now active."
+        f"\n\n"
+        f"You have full access to all features.\n"
+        f"  Web: {settings.FRONTEND_URL}/dashboard/\n"
+        f"  App: {mobile_url}dashboard"
+    )
+    email = EmailMultiAlternatives(
+        subject="Your Fit Trybe subscription is now active",
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
+
+
 def send_subscription_locked_email(user):
     web_url = f"{settings.FRONTEND_URL}/subscription/upgrade/"
     mobile_url = f"{_mobile_url()}subscription/upgrade"
@@ -191,6 +225,103 @@ def send_subscription_locked_email(user):
     )
     email = EmailMultiAlternatives(
         subject="Your Fit Trybe subscription has expired",
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
+
+
+def send_payment_retry_email(user, retry_count, next_retry_at):
+    web_url = f"{settings.FRONTEND_URL}/subscription/upgrade/"
+    mobile_url = f"{_mobile_url()}subscription/upgrade"
+    context = {
+        "user": user,
+        "user_name": get_user_name(user),
+        "user_email": user.email,
+        "retry_count": retry_count,
+        "next_retry_at": next_retry_at,
+        "web_url": web_url,
+        "mobile_url": mobile_url,
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": _logo_url(),
+    }
+    html_content = render_to_string("accounts/emails/payment_retry.html", context)
+    text_content = (
+        f"Hi {get_user_name(user)},\n\n"
+        f"Your recent Fit Trybe payment failed (attempt {retry_count}).\n\n"
+        f"We will retry automatically on {next_retry_at}.\n\n"
+        f"To avoid losing access, update your payment method:\n"
+        f"  In browser: {web_url}\n"
+        f"  In app:     {mobile_url}"
+    )
+    email = EmailMultiAlternatives(
+        subject="Payment failed — we will retry",
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
+
+
+def send_payment_failed_email(user, retry_count):
+    web_url = f"{settings.FRONTEND_URL}/subscription/upgrade/"
+    mobile_url = f"{_mobile_url()}subscription/upgrade"
+    context = {
+        "user": user,
+        "user_name": get_user_name(user),
+        "user_email": user.email,
+        "retry_count": retry_count,
+        "web_url": web_url,
+        "mobile_url": mobile_url,
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": _logo_url(),
+    }
+    html_content = render_to_string("accounts/emails/payment_failed.html", context)
+    text_content = (
+        f"Hi {get_user_name(user)},\n\n"
+        f"We were unable to process your Fit Trybe subscription payment "
+        f"(attempt {retry_count}).\n\n"
+        f"Paystack will attempt to charge again on your next billing date. "
+        f"To avoid losing access, please update your payment method:\n"
+        f"  In browser: {web_url}\n"
+        f"  In app:     {mobile_url}"
+    )
+    email = EmailMultiAlternatives(
+        subject="Payment failed for your Fit Trybe subscription",
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
+
+
+def send_card_expiring_email(user):
+    web_url = f"{settings.FRONTEND_URL}/subscription/billing/"
+    mobile_url = f"{_mobile_url()}subscription/billing"
+    context = {
+        "user": user,
+        "user_name": get_user_name(user),
+        "user_email": user.email,
+        "web_url": web_url,
+        "mobile_url": mobile_url,
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": _logo_url(),
+    }
+    html_content = render_to_string("accounts/emails/card_expiring.html", context)
+    text_content = (
+        f"Hi {get_user_name(user)},\n\n"
+        f"Your payment card on file is expiring soon.\n\n"
+        f"Please update your payment method to avoid interruption "
+        f"to your Fit Trybe subscription:\n"
+        f"  In browser: {web_url}\n"
+        f"  In app:     {mobile_url}"
+    )
+    email = EmailMultiAlternatives(
+        subject="Your payment card is expiring soon",
         body=text_content,
         from_email=settings.DEFAULT_FROM_EMAIL,
         to=[user.email],

@@ -16,9 +16,39 @@ class PlanConfigAdmin(admin.ModelAdmin):
         "price_usd",
         "trial_days",
         "is_active",
+        "paystack_plan_code",
+        "stripe_price_id",
     )
     list_editable = ("price_ngn", "price_usd", "is_active")
     ordering = ("plan",)
+    fieldsets = (
+        (
+            "Plan Details",
+            {
+                "fields": (
+                    "plan",
+                    "display_name",
+                    "description",
+                    "price_ngn",
+                    "price_usd",
+                    "trial_days",
+                    "grace_period_days",
+                    "is_active",
+                    "features",
+                )
+            },
+        ),
+        (
+            "Payment Gateway Codes",
+            {
+                "fields": ("paystack_plan_code", "stripe_price_id"),
+                "description": (
+                    "Paystack: create a plan in Paystack Dashboard → Products → Plans. "
+                    "Stripe: create a price in Stripe Dashboard → Products → Prices."
+                ),
+            },
+        ),
+    )
 
 
 @admin.register(Subscription)

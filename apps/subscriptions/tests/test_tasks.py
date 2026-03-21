@@ -11,7 +11,6 @@ from apps.subscriptions.tasks import (
     check_active_subscription_expirations,
     check_grace_period_expirations,
     check_trial_expirations,
-    process_payment_retries,
 )
 from apps.subscriptions.tests.factories import (
     ActiveSubscriptionFactory,
@@ -128,34 +127,3 @@ class TestCheckActiveSubscriptionExpirations:
         self._expired_active()
         result = check_active_subscription_expirations()
         assert result == 2
-
-
-@pytest.mark.django_db
-class TestProcessPaymentRetries:
-    def _due_retry_sub(self, retry_count=1):
-        sub = ActiveSubscriptionFactory(
-            payment_retry_count=retry_count,
-            next_payment_retry_at=timezone.now() - timedelta(hours=1),
-        )
-        return sub
-
-    def test_schedules_next_retry_for_due_subscription(self):
-        sub = self._due_retry_sub(retry_count=1)
-        process_payment_retries()
-        sub.refresh_from_db()
-        assert sub.payment_retry_count == 2
-
-    def test_enters_grace_when_max_retries_exceeded(self):
-        sub = self._due_retry_sub(retry_count=3)
-        process_payment_retries()
-        sub.refresh_from_db()
-        assert sub.status == Subscription.Status.GRACE
-
-    def test_ignores_subscriptions_not_yet_due(self):
-        sub = ActiveSubscriptionFactory(
-            payment_retry_count=1,
-            next_payment_retry_at=timezone.now() + timedelta(days=2),
-        )
-        process_payment_retries()
-        sub.refresh_from_db()
-        assert sub.payment_retry_count == 1

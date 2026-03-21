@@ -54,6 +54,26 @@ def check_grace_period_expirations():
 
 
 @shared_task
+def check_active_subscription_expirations():
+    """Move ACTIVE subscriptions to GRACE when current_period_end has passed."""
+    from apps.subscriptions.models import Subscription
+
+    expired = Subscription.objects.filter(
+        status=Subscription.Status.ACTIVE,
+        current_period_end__lt=timezone.now(),
+    ).select_related("user", "plan")
+
+    count = 0
+    for sub in expired:
+        sub.enter_grace_period()
+        _send_grace_warning_email(sub.user, sub.grace_period_end)
+        count += 1
+
+    logger.info("Moved %d active subscriptions to grace period.", count)
+    return count
+
+
+@shared_task
 def send_trial_reminder(subscription_id):
     """Send trial expiry reminder email (3 days or 1 day remaining)."""
     from apps.subscriptions.models import Subscription

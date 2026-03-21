@@ -1,0 +1,61 @@
+{% extends "accounts/emails/base_email.html" %}
+
+{% block title %}Your Payment Card is Expiring Soon{% endblock %}
+
+{% block banner %}
+<tr>
+  <td style="background-color:#1A1A2E;padding:32px 40px;text-align:center;">
+    <p style="font-size:32px;margin:0 0 8px;">&#128179;</p>
+    <h1 style="color:#F59E0B;font-size:22px;margin:0;font-weight:bold;">
+      Card Expiring Soon
+    </h1>
+  </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<h2 style="color:#1A1A2E;font-size:20px;margin:0 0 16px;">
+  Hi {{ user_name }}, your payment card is expiring soon
+</h2>
+<p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 20px;">
+  The payment card linked to your Fit Trybe subscription is expiring soon.
+</p>
+<div style="border-left:4px solid #F59E0B;padding:12px 16px;background-color:#FFFBEB;
+            border-radius:0 4px 4px 0;margin:0 0 20px;">
+  <p style="color:#374151;font-size:13px;margin:0;line-height:1.5;">
+    Please update your payment method before your card expires to avoid
+    any interruption to your Fit Trybe subscription.
+  </p>
+</div>
+<p style="color:#374151;font-size:14px;line-height:1.6;margin:0;">
+  If your card expires and we cannot charge it, your subscription may
+  enter a grace period.
+</p>
+{% endblock %}
+
+{% block cta %}
+<tr>
+  <td style="padding:0 40px 32px;text-align:center;">
+    <a href="{{ web_url }}"
+       style="display:inline-block;background-color:#F59E0B;color:#FFFFFF;
+              text-decoration:none;padding:14px 36px;border-radius:8px;
+              font-size:15px;font-weight:bold;letter-spacing:0.5px;margin-bottom:12px;">
+      Update Payment Method
+    </a>
+    <br>
+    <a href="{{ mobile_url }}"
+       style="display:inline-block;background-color:transparent;color:#F59E0B;
+              text-decoration:none;padding:12px 36px;border-radius:8px;
+              font-size:14px;font-weight:bold;letter-spacing:0.5px;
+              border:2px solid #F59E0B;">
+      Open in App
+    </a>
+    <p style="margin:16px 0 0;">
+      <a href="mailto:support@fittrybe.com"
+         style="color:#6B7280;font-size:13px;text-decoration:underline;">
+        Contact Support
+      </a>
+    </p>
+  </td>
+</tr>
+{% endblock %}

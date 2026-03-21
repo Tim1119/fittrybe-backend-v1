@@ -118,10 +118,12 @@ class TestSubscriptionStatusView:
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
 class TestPaystackCheckoutView:
-    def test_initializes_transaction(self):
+    def test_initializes_transaction_without_plan_code(self):
         user = TrainerFactory()
-        BasicPlanFactory()
-        SubscriptionFactory(user=user)
+        plan = BasicPlanFactory()
+        plan.paystack_plan_code = ""
+        plan.save(update_fields=["paystack_plan_code"])
+        SubscriptionFactory(user=user, plan=plan)
 
         mock_response = {
             "status": True,
@@ -133,11 +135,36 @@ class TestPaystackCheckoutView:
         with patch(
             "apps.subscriptions.views.PaystackGateway.initialize_transaction",
             return_value=mock_response,
-        ):
+        ) as mock_init:
             resp = _auth_client(user).post(PAYSTACK_CHECKOUT_URL, format="json")
 
         assert resp.status_code == status.HTTP_200_OK
-        assert "authorization_url" in resp.data["data"]
+        call_kwargs = mock_init.call_args.kwargs
+        assert "plan" not in call_kwargs
+
+    def test_initializes_transaction_with_plan_code(self):
+        user = TrainerFactory()
+        plan = BasicPlanFactory()
+        plan.paystack_plan_code = "PLN_testcode"
+        plan.save(update_fields=["paystack_plan_code"])
+        SubscriptionFactory(user=user, plan=plan)
+
+        mock_response = {
+            "status": True,
+            "data": {
+                "authorization_url": "https://checkout.paystack.com/abc",
+                "reference": "ref_abc123",
+            },
+        }
+        with patch(
+            "apps.subscriptions.views.PaystackGateway.initialize_transaction",
+            return_value=mock_response,
+        ) as mock_init:
+            resp = _auth_client(user).post(PAYSTACK_CHECKOUT_URL, format="json")
+
+        assert resp.status_code == status.HTTP_200_OK
+        call_kwargs = mock_init.call_args.kwargs
+        assert call_kwargs.get("plan") == "PLN_testcode"
 
     def test_client_returns_403(self):
         user = ClientFactory()
@@ -156,8 +183,10 @@ class TestPaystackCheckoutView:
 class TestStripeCheckoutView:
     def test_creates_checkout_session(self):
         user = TrainerFactory()
-        BasicPlanFactory()
-        SubscriptionFactory(user=user)
+        plan = BasicPlanFactory()
+        plan.stripe_price_id = "price_test_123"
+        plan.save(update_fields=["stripe_price_id"])
+        SubscriptionFactory(user=user, plan=plan)
 
         mock_customer = MagicMock()
         mock_customer.id = "cus_test_123"
@@ -174,14 +203,19 @@ class TestStripeCheckoutView:
                 return_value=mock_session,
             ),
         ):
-            resp = _auth_client(user).post(
-                STRIPE_CHECKOUT_URL,
-                data={"price_id": "price_test_123"},
-                format="json",
-            )
+            resp = _auth_client(user).post(STRIPE_CHECKOUT_URL, format="json")
 
         assert resp.status_code == status.HTTP_200_OK
         assert "checkout_url" in resp.data["data"]
+
+    def test_returns_400_when_stripe_price_id_not_configured(self):
+        user = TrainerFactory()
+        plan = BasicPlanFactory()
+        plan.stripe_price_id = ""
+        plan.save(update_fields=["stripe_price_id"])
+        SubscriptionFactory(user=user, plan=plan)
+        resp = _auth_client(user).post(STRIPE_CHECKOUT_URL, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_client_returns_403(self):
         user = ClientFactory()
@@ -233,8 +267,7 @@ class TestPaystackWebhookView:
         BasicPlanFactory()
         sub = SubscriptionFactory(user=user)
         sub.payment_retry_count = 2
-        sub.next_payment_retry_at = timezone.now() + timedelta(days=7)
-        sub.save(update_fields=["payment_retry_count", "next_payment_retry_at"])
+        sub.save(update_fields=["payment_retry_count"])
 
         event_data = {
             "reference": "ref_reset_001",
@@ -244,20 +277,16 @@ class TestPaystackWebhookView:
             "paid_at": "2024-01-01T00:00:00.000Z",
             "metadata": {"user_id": str(user.id)},
         }
-        with (
-            patch(
-                "apps.subscriptions.views.PaystackGateway.verify_webhook",
-                return_value=True,
-            ),
-            patch("apps.accounts.emails.send_subscription_activated_email"),
+        with patch(
+            "apps.subscriptions.views.PaystackGateway.verify_webhook",
+            return_value=True,
         ):
             self._post_webhook("charge.success", event_data)
 
         sub.refresh_from_db()
         assert sub.payment_retry_count == 0
-        assert sub.next_payment_retry_at is None
 
-    def test_payment_failed_schedules_retry(self):
+    def test_payment_failed_increments_retry_count(self):
         user = TrainerFactory()
         BasicPlanFactory()
         sub = ActiveSubscriptionFactory(user=user)
@@ -266,19 +295,56 @@ class TestPaystackWebhookView:
             "customer": {"email": user.email},
             "metadata": {"user_id": str(user.id)},
         }
-        with (
-            patch(
-                "apps.subscriptions.views.PaystackGateway.verify_webhook",
-                return_value=True,
-            ),
-            patch("apps.accounts.emails.send_payment_retry_email"),
+        with patch(
+            "apps.subscriptions.views.PaystackGateway.verify_webhook",
+            return_value=True,
         ):
             resp = self._post_webhook("invoice.payment_failed", event_data)
 
         assert resp.status_code == status.HTTP_200_OK
         sub.refresh_from_db()
         assert sub.payment_retry_count == 1
-        assert sub.next_payment_retry_at is not None
+
+    def test_payment_failed_three_times_enters_grace(self):
+        user = TrainerFactory()
+        BasicPlanFactory()
+        sub = ActiveSubscriptionFactory(user=user, payment_retry_count=2)
+
+        event_data = {
+            "customer": {"email": user.email},
+            "metadata": {"user_id": str(user.id)},
+        }
+        with patch(
+            "apps.subscriptions.views.PaystackGateway.verify_webhook",
+            return_value=True,
+        ):
+            self._post_webhook("invoice.payment_failed", event_data)
+
+        sub.refresh_from_db()
+        assert sub.status == Subscription.Status.GRACE
+
+    def test_subscription_create_stores_codes(self):
+        user = TrainerFactory()
+        BasicPlanFactory()
+        sub = SubscriptionFactory(user=user)
+
+        event_data = {
+            "subscription_code": "SUB_testcode",
+            "email_token": "tok_test",
+            "customer": {"customer_code": "CUS_testcode"},
+            "metadata": {"user_id": str(user.id)},
+        }
+        with patch(
+            "apps.subscriptions.views.PaystackGateway.verify_webhook",
+            return_value=True,
+        ):
+            resp = self._post_webhook("subscription.create", event_data)
+
+        assert resp.status_code == status.HTTP_200_OK
+        sub.refresh_from_db()
+        assert sub.paystack_subscription_code == "SUB_testcode"
+        assert sub.paystack_email_token == "tok_test"
+        assert sub.paystack_customer_code == "CUS_testcode"
 
     def test_invalid_signature_returns_400(self):
         payload = json.dumps({"event": "charge.success", "data": {}}).encode()
@@ -353,7 +419,6 @@ class TestStripeWebhookView:
         sub = ActiveSubscriptionFactory(
             user=user,
             payment_retry_count=1,
-            next_payment_retry_at=timezone.now() + timedelta(days=3),
         )
 
         mock_event = {
@@ -386,9 +451,8 @@ class TestStripeWebhookView:
 
         sub.refresh_from_db()
         assert sub.payment_retry_count == 0
-        assert sub.next_payment_retry_at is None
 
-    def test_invoice_payment_failed_schedules_retry(self):
+    def test_invoice_payment_failed_increments_retry_count(self):
         user = TrainerFactory()
         BasicPlanFactory()
         sub = ActiveSubscriptionFactory(user=user)
@@ -403,12 +467,9 @@ class TestStripeWebhookView:
                 }
             },
         }
-        with (
-            patch(
-                "apps.subscriptions.views.StripeGateway.verify_webhook",
-                return_value=mock_event,
-            ),
-            patch("apps.accounts.emails.send_payment_retry_email"),
+        with patch(
+            "apps.subscriptions.views.StripeGateway.verify_webhook",
+            return_value=mock_event,
         ):
             payload = json.dumps(mock_event).encode()
             resp = APIClient().post(
@@ -421,7 +482,6 @@ class TestStripeWebhookView:
         assert resp.status_code == status.HTTP_200_OK
         sub.refresh_from_db()
         assert sub.payment_retry_count == 1
-        assert sub.next_payment_retry_at is not None
 
     def test_invalid_stripe_signature_returns_400(self):
         with patch(

@@ -19,13 +19,15 @@ class PaystackGateway:
             "Content-Type": "application/json",
         }
 
-    def initialize_transaction(self, email, amount_kobo, metadata=None):
+    def initialize_transaction(self, email, amount_kobo, metadata=None, plan=None):
         payload = {
             "email": email,
             "amount": amount_kobo,
             "metadata": metadata or {},
             "callback_url": f"{settings.FRONTEND_URL}/subscription/callback",
         }
+        if plan:
+            payload["plan"] = plan
         response = requests.post(
             f"{PAYSTACK_BASE_URL}/transaction/initialize",
             json=payload,
