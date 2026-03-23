@@ -1,0 +1,352 @@
+/* Fit Trybe profile pages — mobile-first */
+
+:root {
+    --orange: #E8490F;
+    --navy: #1A1A2E;
+    --bg: #f8f8f8;
+    --card-bg: #ffffff;
+    --text: #222222;
+    --muted: #666666;
+    --border: #e0e0e0;
+    --radius: 12px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding-bottom: 80px; /* room for sticky banner */
+}
+
+/* Header */
+.site-header {
+    background: var(--navy);
+    padding: 14px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.brand-logo {
+    background: var(--orange);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.brand-name {
+    color: #fff;
+    font-weight: 600;
+    font-size: 18px;
+}
+
+/* Main */
+.main-content {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+/* Profile card */
+.profile-card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.profile-hero {
+    text-align: center;
+    padding: 32px 16px 20px;
+    background: linear-gradient(180deg, var(--navy) 0%, var(--navy) 50%, var(--card-bg) 100%);
+}
+
+.profile-photo {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #fff;
+    margin-bottom: 12px;
+}
+
+.profile-photo--placeholder {
+    background: var(--orange);
+    color: #fff;
+    font-size: 36px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+}
+
+.profile-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+}
+
+.profile-location {
+    color: rgba(255,255,255,0.75);
+    font-size: 14px;
+}
+
+/* Rating */
+.profile-rating {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.stars {
+    color: #f5a623;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.rating-count {
+    color: var(--muted);
+    font-size: 14px;
+}
+
+/* Sections */
+.profile-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.profile-section:last-child {
+    border-bottom: none;
+}
+
+.profile-section h2 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 10px;
+}
+
+.profile-bio {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+}
+
+/* Chips */
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.chip {
+    background: #fff3ef;
+    color: var(--orange);
+    border: 1px solid #f5c5b2;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* Services */
+.services-list {
+    list-style: none;
+}
+
+.service-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.service-item:last-child {
+    border-bottom: none;
+}
+
+.service-name {
+    font-size: 15px;
+}
+
+/* Availability */
+.availability-list {
+    list-style: none;
+}
+
+.availability-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+}
+
+.day {
+    font-weight: 600;
+    font-size: 14px;
+    width: 90px;
+}
+
+.time {
+    font-size: 14px;
+    color: var(--muted);
+    flex: 1;
+}
+
+/* Badge */
+.badge {
+    background: #f0f0f0;
+    color: var(--muted);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    text-transform: capitalize;
+}
+
+/* Pricing */
+.pricing {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--navy);
+}
+
+/* Contact */
+.contact-item {
+    font-size: 15px;
+    margin-bottom: 6px;
+    color: var(--text);
+}
+
+/* CTA */
+.profile-cta {
+    padding: 16px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+}
+
+.btn {
+    display: inline-block;
+    padding: 14px 32px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: opacity 0.15s;
+}
+
+.btn--primary {
+    background: var(--orange);
+    color: #fff;
+    width: 100%;
+    text-align: center;
+}
+
+.btn--primary:hover {
+    opacity: 0.9;
+}
+
+/* Download section */
+.download-section {
+    text-align: center;
+}
+
+.download-label {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 12px;
+}
+
+.store-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.store-btn {
+    background: var(--navy);
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.store-btn:hover {
+    opacity: 0.85;
+}
+
+/* Sticky bottom banner */
+.open-app-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--navy);
+    padding: 12px 16px;
+    z-index: 200;
+    text-align: center;
+}
+
+.banner-btn {
+    display: block;
+    background: var(--orange);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+/* Responsive */
+@media (min-width: 640px) {
+    .main-content {
+        padding: 24px 16px;
+    }
+
+    .profile-photo {
+        width: 120px;
+        height: 120px;
+    }
+
+    .profile-photo--placeholder {
+        width: 120px;
+        height: 120px;
+        font-size: 48px;
+    }
+
+    .profile-name {
+        font-size: 26px;
+    }
+}

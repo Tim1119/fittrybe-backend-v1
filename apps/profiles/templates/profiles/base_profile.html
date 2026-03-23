@@ -1,0 +1,40 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Fit Trybe{% endblock %}</title>
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="{{ og_title }}">
+    <meta property="og:description" content="{{ og_description }}">
+    <meta property="og:image" content="{{ og_image }}">
+    <meta property="og:url" content="{{ page_url }}">
+    <meta property="og:type" content="profile">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ og_title }}">
+    <meta name="twitter:description" content="{{ og_description }}">
+    <meta name="twitter:image" content="{{ og_image }}">
+
+    <link rel="stylesheet" href="{% static 'profiles/css/profile.css' %}">
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-inner">
+            <span class="brand-logo">FT</span>
+            <span class="brand-name">Fit Trybe</span>
+        </div>
+    </header>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div class="open-app-banner">
+        {% block open_app_link %}{% endblock %}
+    </div>
+</body>
+</html>

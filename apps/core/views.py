@@ -1,7 +1,9 @@
 """
-Core views — system health check.
+Core views — system health check and well-known deep link files.
 """
 
+from django.http import JsonResponse
+from django.views import View
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
@@ -30,3 +32,40 @@ class HealthCheckView(APIView):
             data={"status": "healthy"},
             message="Service is healthy.",
         )
+
+
+class AppleAppSiteAssociationView(View):
+    def get(self, request):
+        data = {
+            "applinks": {
+                "apps": [],
+                "details": [
+                    {
+                        "appID": "TEAMID.com.fittrybe.app",
+                        "paths": [
+                            "/trainer/*",
+                            "/gym/*",
+                            "/invite/*",
+                            "/verify-email/*",
+                            "/reset-password/*",
+                        ],
+                    }
+                ],
+            }
+        }
+        return JsonResponse(data, content_type="application/json")
+
+
+class AssetLinksView(View):
+    def get(self, request):
+        data = [
+            {
+                "relation": ["delegate_permission/common.handle_all_urls"],
+                "target": {
+                    "namespace": "android_app",
+                    "package_name": "com.fittrybe.app",
+                    "sha256_cert_fingerprints": ["PLACEHOLDER_SHA256_FINGERPRINT"],
+                },
+            }
+        ]
+        return JsonResponse(data, safe=False, content_type="application/json")

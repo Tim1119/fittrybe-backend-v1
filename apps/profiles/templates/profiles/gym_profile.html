@@ -1,0 +1,104 @@
+{% extends "profiles/base_profile.html" %}
+{% load static %}
+
+{% block title %}{{ profile.gym_name }} — Gym | Fit Trybe{% endblock %}
+
+{% block content %}
+<div class="profile-card">
+    <!-- Logo + Name -->
+    <div class="profile-hero">
+        {% if profile.logo_url %}
+        <img class="profile-photo" src="{{ profile.logo_url }}" alt="{{ profile.gym_name }}">
+        {% else %}
+        <div class="profile-photo profile-photo--placeholder">{{ profile.gym_name|slice:":1" }}</div>
+        {% endif %}
+        <h1 class="profile-name">{{ profile.gym_name }}</h1>
+        {% if profile.city %}
+        <p class="profile-location">📍 {{ profile.city }}{% if profile.location %}, {{ profile.location }}{% endif %}</p>
+        {% elif profile.location %}
+        <p class="profile-location">📍 {{ profile.location }}</p>
+        {% endif %}
+    </div>
+
+    <!-- Rating -->
+    {% if profile.rating_count > 0 %}
+    <div class="profile-rating">
+        <span class="stars">★ {{ profile.avg_rating }}</span>
+        <span class="rating-count">({{ profile.rating_count }} reviews)</span>
+    </div>
+    {% endif %}
+
+    <!-- About -->
+    {% if profile.about %}
+    <div class="profile-section">
+        <h2>About</h2>
+        <p class="profile-bio">{{ profile.about }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Services -->
+    {% if services %}
+    <div class="profile-section">
+        <h2>Services</h2>
+        <ul class="services-list">
+            {% for service in services %}
+            <li class="service-item">
+                <span class="service-name">{{ service.name }}</span>
+                <span class="service-type badge">{{ service.session_type }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Opening Hours -->
+    {% if availability %}
+    <div class="profile-section">
+        <h2>Opening Hours</h2>
+        <ul class="availability-list">
+            {% for slot in availability %}
+            <li class="availability-item">
+                <span class="day">{{ slot.day_of_week|capfirst }}</span>
+                <span class="time">{{ slot.start_time|time:"H:i" }} – {{ slot.end_time|time:"H:i" }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Contact -->
+    {% if profile.contact_phone or profile.business_email %}
+    <div class="profile-section">
+        <h2>Contact</h2>
+        {% if profile.contact_phone %}
+        <p class="contact-item">📞 {{ profile.contact_phone }}</p>
+        {% endif %}
+        {% if profile.business_email %}
+        <p class="contact-item">✉️ {{ profile.business_email }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- CTA -->
+    <div class="profile-cta">
+        <a href="fittrybe://gym/{{ profile.slug }}" class="btn btn--primary">Open in Fit Trybe</a>
+    </div>
+
+    <!-- Download -->
+    <div class="profile-section download-section">
+        <p class="download-label">Don't have Fit Trybe yet?</p>
+        <div class="store-buttons">
+            <a href="{{ app_store_url }}" class="store-btn" target="_blank" rel="noopener">
+                App Store
+            </a>
+            <a href="{{ play_store_url }}" class="store-btn" target="_blank" rel="noopener">
+                Google Play
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block open_app_link %}
+<a href="fittrybe://gym/{{ profile.slug }}" class="banner-btn">Open in Fit Trybe App</a>
+{% endblock %}

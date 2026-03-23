@@ -8,8 +8,27 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+from apps.core.views import AppleAppSiteAssociationView, AssetLinksView
+from apps.profiles.views import PublicGymProfileHTMLView, PublicTrainerProfileHTMLView
+
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Web profile pages (HTML)
+    path(
+        "trainer/<slug:slug>/",
+        PublicTrainerProfileHTMLView.as_view(),
+        name="trainer-web-profile",
+    ),
+    path(
+        "gym/<slug:slug>/", PublicGymProfileHTMLView.as_view(), name="gym-web-profile"
+    ),
+    # Well-known deep link config
+    path(
+        ".well-known/apple-app-site-association",
+        AppleAppSiteAssociationView.as_view(),
+        name="apple-app-site-association",
+    ),
+    path(".well-known/assetlinks.json", AssetLinksView.as_view(), name="assetlinks"),
     # API v1
     path("api/v1/", include("apps.core.urls")),
     path("api/v1/auth/", include("apps.accounts.urls")),

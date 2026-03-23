@@ -9,6 +9,9 @@ import uuid
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
+from django.http import Http404
+from django.shortcuts import render
+from django.views import View
 from drf_spectacular.utils import (
     OpenApiParameter,
     OpenApiResponse,
@@ -1201,4 +1204,72 @@ class SpecialisationListView(APIView):
         return APIResponse.success(
             data=SpecialisationSerializer(specs, many=True).data,
             message="Specialisations retrieved.",
+        )
+
+
+_DEFAULT_OG_IMAGE = "https://fittrybe.com/static/profiles/img/og-default.png"
+_APP_STORE_URL = "https://apps.apple.com/app/fittrybe/idXXXXXXXXX"
+_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.fittrybe.app"
+
+
+class PublicTrainerProfileHTMLView(View):
+    def get(self, request, slug):
+        try:
+            profile = (
+                TrainerProfile.objects.select_related("user")
+                .prefetch_related("specialisations", "availability", "services")
+                .get(slug=slug, is_published=True)
+            )
+        except TrainerProfile.DoesNotExist:
+            raise Http404
+
+        bio_excerpt = (
+            (profile.bio[:155] + "…") if len(profile.bio) > 155 else profile.bio
+        )
+        return render(
+            request,
+            "profiles/trainer_profile.html",
+            {
+                "profile": profile,
+                "specialisations": profile.specialisations.all(),
+                "availability": profile.availability.all(),
+                "services": profile.services.all(),
+                "page_url": request.build_absolute_uri(),
+                "og_title": f"{profile.full_name} — Personal Trainer",
+                "og_description": bio_excerpt,
+                "og_image": profile.profile_photo_url or _DEFAULT_OG_IMAGE,
+                "app_store_url": _APP_STORE_URL,
+                "play_store_url": _PLAY_STORE_URL,
+            },
+        )
+
+
+class PublicGymProfileHTMLView(View):
+    def get(self, request, slug):
+        try:
+            profile = (
+                GymProfile.objects.select_related("user")
+                .prefetch_related("availability", "services")
+                .get(slug=slug, is_published=True)
+            )
+        except GymProfile.DoesNotExist:
+            raise Http404
+
+        about_excerpt = (
+            (profile.about[:155] + "…") if len(profile.about) > 155 else profile.about
+        )
+        return render(
+            request,
+            "profiles/gym_profile.html",
+            {
+                "profile": profile,
+                "availability": profile.availability.all(),
+                "services": profile.services.all(),
+                "page_url": request.build_absolute_uri(),
+                "og_title": f"{profile.gym_name} — Gym on Fit Trybe",
+                "og_description": about_excerpt,
+                "og_image": profile.logo_url or _DEFAULT_OG_IMAGE,
+                "app_store_url": _APP_STORE_URL,
+                "play_store_url": _PLAY_STORE_URL,
+            },
         )
