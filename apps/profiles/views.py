@@ -1208,8 +1208,6 @@ class SpecialisationListView(APIView):
 
 
 _DEFAULT_OG_IMAGE = "https://fittrybe.com/static/profiles/img/og-default.png"
-_APP_STORE_URL = "https://apps.apple.com/app/fittrybe/idXXXXXXXXX"
-_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.fittrybe.app"
 
 
 class PublicTrainerProfileHTMLView(View):
@@ -1238,8 +1236,8 @@ class PublicTrainerProfileHTMLView(View):
                 "og_title": f"{profile.full_name} — Personal Trainer",
                 "og_description": bio_excerpt,
                 "og_image": profile.profile_photo_url or _DEFAULT_OG_IMAGE,
-                "app_store_url": _APP_STORE_URL,
-                "play_store_url": _PLAY_STORE_URL,
+                "app_store_url": settings.APP_STORE_URL,
+                "play_store_url": settings.PLAY_STORE_URL,
             },
         )
 
@@ -1269,7 +1267,7 @@ class PublicGymProfileHTMLView(View):
                 "og_title": f"{profile.gym_name} — Gym on Fit Trybe",
                 "og_description": about_excerpt,
                 "og_image": profile.logo_url or _DEFAULT_OG_IMAGE,
-                "app_store_url": _APP_STORE_URL,
-                "play_store_url": _PLAY_STORE_URL,
+                "app_store_url": settings.APP_STORE_URL,
+                "play_store_url": settings.PLAY_STORE_URL,
             },
         )

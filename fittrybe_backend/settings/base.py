@@ -344,6 +344,15 @@ STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
 STRIPE_WEBHOOK_SECRET = ""
 
+# ---------------------------------------------------------------------------
+# Deep link / app store config
+# ---------------------------------------------------------------------------
+APPLE_TEAM_ID = env("APPLE_TEAM_ID", default="TEAMID")
+ANDROID_PACKAGE_NAME = env("ANDROID_PACKAGE_NAME", default="com.fittrybe.app")
+ANDROID_SHA256_FINGERPRINT = env("ANDROID_SHA256_FINGERPRINT", default="PLACEHOLDER")
+APP_STORE_URL = env("APP_STORE_URL", default="#")
+PLAY_STORE_URL = env("PLAY_STORE_URL", default="#")
+
 
 # ---------------------------------------------------------------------------
 # Celery Beat — scheduled tasks

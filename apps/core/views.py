@@ -2,6 +2,7 @@
 Core views — system health check and well-known deep link files.
 """
 
+from django.conf import settings
 from django.http import JsonResponse
 from django.views import View
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -41,7 +42,10 @@ class AppleAppSiteAssociationView(View):
                 "apps": [],
                 "details": [
                     {
-                        "appID": "TEAMID.com.fittrybe.app",
+                        "appID": (
+                            f"{settings.APPLE_TEAM_ID}"
+                            f".{settings.ANDROID_PACKAGE_NAME}"
+                        ),
                         "paths": [
                             "/trainer/*",
                             "/gym/*",
@@ -63,8 +67,8 @@ class AssetLinksView(View):
                 "relation": ["delegate_permission/common.handle_all_urls"],
                 "target": {
                     "namespace": "android_app",
-                    "package_name": "com.fittrybe.app",
-                    "sha256_cert_fingerprints": ["PLACEHOLDER_SHA256_FINGERPRINT"],
+                    "package_name": settings.ANDROID_PACKAGE_NAME,
+                    "sha256_cert_fingerprints": [settings.ANDROID_SHA256_FINGERPRINT],
                 },
             }
         ]
