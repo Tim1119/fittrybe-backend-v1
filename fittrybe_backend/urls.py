@@ -32,6 +32,7 @@ urlpatterns = [
     # API v1
     path("api/v1/", include("apps.core.urls")),
     path("api/v1/auth/", include("apps.accounts.urls")),
+    path("api/v1/onboarding/", include("apps.accounts.onboarding_urls")),
     path("api/v1/profiles/", include("apps.profiles.urls")),
     path("api/v1/clients/", include("apps.clients.urls")),
     path("api/v1/chat/", include("apps.chat.urls")),

@@ -578,7 +578,7 @@ No request body needed — just POST to this endpoint.
         with transaction.atomic():
             profile.is_published = True
             profile.wizard_completed = True
-            profile.wizard_step = 4
+            profile.wizard_step = max(profile.wizard_step, 4)
             profile.save(
                 update_fields=["is_published", "wizard_completed", "wizard_step"]
             )
