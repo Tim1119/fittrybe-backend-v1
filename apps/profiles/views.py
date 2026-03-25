@@ -1889,3 +1889,111 @@ class GymTrainerDetailView(APIView):
             trainer_user.hard_delete()
 
         return APIResponse.success(message="Trainer account deleted.")
+
+
+@extend_schema(
+    summary="Accept gym trainer invite and set password",
+    description=(
+        "Public endpoint — no authentication required.\n\n"
+        "The gym trainer clicks the invite link in their email, which contains "
+        "`uid` and `token` query params. They submit those together with a chosen "
+        "password to activate their account.\n\n"
+        "The token is tied to the user's current password hash and `is_active` "
+        "flag, so it is automatically invalidated once the password is set or "
+        "after 48 hours (Django PASSWORD_RESET_TIMEOUT).\n\n"
+        "Returns 400 if the uid/token is invalid or expired, if the account is "
+        "already active, if passwords do not match, or if the password is too weak "
+        "(zxcvbn score < 2)."
+    ),
+    request=inline_serializer(
+        name="GymTrainerAcceptRequest",
+        fields={
+            "uid": drf_serializers.CharField(),
+            "token": drf_serializers.CharField(),
+            "password": drf_serializers.CharField(),
+            "confirm_password": drf_serializers.CharField(),
+        },
+    ),
+    responses={
+        200: OpenApiResponse(description="Account activated — trainer can now log in"),
+        400: OpenApiResponse(
+            description=(
+                "uid/token missing or invalid, passwords mismatch, "
+                "weak password, or account already active"
+            )
+        ),
+    },
+    tags=["Gym Trainers"],
+    auth=[],
+)
+class GymTrainerAcceptView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        uid = request.data.get("uid", "").strip()
+        token = request.data.get("token", "").strip()
+        password = request.data.get("password", "")
+        confirm_password = request.data.get("confirm_password", "")
+
+        if not uid or not token or not password or not confirm_password:
+            return APIResponse.error(
+                message="uid, token, password and confirm_password are required.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        if password != confirm_password:
+            return APIResponse.error(
+                message="Passwords do not match.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        import zxcvbn as zxcvbn_lib
+
+        result = zxcvbn_lib.zxcvbn(password)
+        if result["score"] < 2:
+            return APIResponse.error(
+                message="Password is too weak. Please choose a stronger password.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        try:
+            from django.utils.encoding import force_str
+            from django.utils.http import urlsafe_base64_decode
+
+            user_pk = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_pk)
+        except Exception:
+            return APIResponse.error(
+                message="Invalid or expired invite link.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        from apps.profiles.tokens import gym_trainer_invite_token
+
+        if not gym_trainer_invite_token.check_token(user, token):
+            return APIResponse.error(
+                message="Invalid or expired invite link.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        if user.is_active:
+            return APIResponse.error(
+                message="This account has already been set up. Please log in.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        with transaction.atomic():
+            user.set_password(password)
+            user.is_active = True
+            user.is_email_verified = True
+            user.save(update_fields=["password", "is_active", "is_email_verified"])
+
+        return APIResponse.success(
+            message="Account set up successfully. You can now log in."
+        )

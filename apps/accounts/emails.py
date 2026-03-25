@@ -332,10 +332,12 @@ def send_card_expiring_email(user):
 
 def send_gym_trainer_invite_email(user, gym_profile):
     """Send a set-password invite to a newly added gym trainer."""
-    token = PasswordResetTokenGenerator().make_token(user)
+    from apps.profiles.tokens import gym_trainer_invite_token
+
     uid = urlsafe_base64_encode(force_bytes(user.pk))
-    web_url = f"{settings.FRONTEND_URL}/set-password/?uid={uid}&token={token}"
-    deep_link = f"{_mobile_url()}set-password?uid={uid}&token={token}"
+    token = gym_trainer_invite_token.make_token(user)
+    web_url = f"{settings.FRONTEND_URL}/gym/trainer/setup?uid={uid}&token={token}"
+    deep_link = f"{_mobile_url()}gym/trainer/setup?uid={uid}&token={token}"
     trainer_name = user.display_name or get_user_name(user)
     gym_name = gym_profile.gym_name
     context = {

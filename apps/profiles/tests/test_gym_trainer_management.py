@@ -16,14 +16,18 @@ Rules under test:
 from unittest.mock import patch
 
 import pytest
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 
 from apps.accounts.models import User
 from apps.accounts.tests.factories import GymFactory, TrainerFactory
 from apps.clients.tests.factories import ClientMembershipTrainerFactory
 from apps.profiles.models import GymTrainer, TrainerProfile
 from apps.profiles.tests.factories import GymProfileFactory, GymTrainerFactory
+from apps.profiles.tokens import gym_trainer_invite_token
 
 LIST_CREATE_URL = "/api/v1/profiles/gym/trainers/"
+ACCEPT_URL = "/api/v1/profiles/gym/trainers/accept/"
 
 
 def detail_url(pk):
@@ -268,3 +272,243 @@ class TestGymTrainerRead:
         resp = api_client.get(detail_url(other_gym_trainer.pk))
 
         assert resp.status_code == 404
+
+
+# ── Accept invite tests ────────────────────────────────────────────────────────
+
+
+def _make_inactive_trainer_user():
+    """Create a trainer User whose account is inactive (as-created by gym invite)."""
+    user = TrainerFactory()
+    user.is_active = False
+    user.set_unusable_password()
+    user.save(update_fields=["is_active", "password"])
+    return user
+
+
+def _valid_uid_token(user):
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = gym_trainer_invite_token.make_token(user)
+    return uid, token
+
+
+@pytest.mark.django_db
+class TestGymTrainerAcceptInvite:
+    def test_valid_accept_returns_200(self, api_client):
+        user = _make_inactive_trainer_user()
+        uid, token = _valid_uid_token(user)
+
+        resp = api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "token": token,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 200
+
+    def test_user_is_active_after_accept(self, api_client):
+        user = _make_inactive_trainer_user()
+        uid, token = _valid_uid_token(user)
+
+        api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "token": token,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        user.refresh_from_db()
+        assert user.is_active is True
+
+    def test_password_is_set_after_accept(self, api_client):
+        user = _make_inactive_trainer_user()
+        uid, token = _valid_uid_token(user)
+
+        api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "token": token,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        user.refresh_from_db()
+        assert user.has_usable_password()
+        assert user.check_password("Str0ng!Pass#99")
+
+    def test_trainer_can_login_after_accept(self, api_client):
+        user = _make_inactive_trainer_user()
+        uid, token = _valid_uid_token(user)
+        api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "token": token,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        resp = api_client.post(
+            "/api/v1/auth/login/",
+            {"email": user.email, "password": "Str0ng!Pass#99"},
+            format="json",
+        )
+
+        assert resp.status_code == 200
+
+    def test_passwords_mismatch_returns_400(self, api_client):
+        user = _make_inactive_trainer_user()
+        uid, token = _valid_uid_token(user)
+
+        resp = api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "token": token,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Different#99",
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 400
+        assert resp.data["code"] == "VALIDATION_ERROR"
+
+    def test_weak_password_returns_400(self, api_client):
+        user = _make_inactive_trainer_user()
+        uid, token = _valid_uid_token(user)
+
+        resp = api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "token": token,
+                "password": "password",
+                "confirm_password": "password",
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 400
+        assert resp.data["code"] == "VALIDATION_ERROR"
+
+    def test_invalid_uid_returns_400(self, api_client):
+        user = _make_inactive_trainer_user()
+        _, token = _valid_uid_token(user)
+
+        resp = api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": "notvalidbase64!!!!",
+                "token": token,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 400
+        assert resp.data["code"] == "VALIDATION_ERROR"
+
+    def test_invalid_token_returns_400(self, api_client):
+        user = _make_inactive_trainer_user()
+        uid, _ = _valid_uid_token(user)
+
+        resp = api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "token": "totally-wrong-token",
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 400
+        assert resp.data["code"] == "VALIDATION_ERROR"
+
+    def test_tampered_token_returns_400(self, api_client):
+        user = _make_inactive_trainer_user()
+        uid, token = _valid_uid_token(user)
+        tampered = token[:-4] + "XXXX"
+
+        resp = api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "token": tampered,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 400
+        assert resp.data["code"] == "VALIDATION_ERROR"
+
+    def test_already_active_user_returns_400(self, api_client):
+        user = TrainerFactory()  # active by default
+        uid, token = _valid_uid_token(user)
+
+        resp = api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "token": token,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 400
+        assert resp.data["code"] == "VALIDATION_ERROR"
+
+    def test_missing_uid_returns_400(self, api_client):
+        user = _make_inactive_trainer_user()
+        _, token = _valid_uid_token(user)
+
+        resp = api_client.post(
+            ACCEPT_URL,
+            {
+                "token": token,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 400
+        assert resp.data["code"] == "VALIDATION_ERROR"
+
+    def test_missing_token_returns_400(self, api_client):
+        user = _make_inactive_trainer_user()
+        uid, _ = _valid_uid_token(user)
+
+        resp = api_client.post(
+            ACCEPT_URL,
+            {
+                "uid": uid,
+                "password": "Str0ng!Pass#99",
+                "confirm_password": "Str0ng!Pass#99",
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 400
+        assert resp.data["code"] == "VALIDATION_ERROR"
