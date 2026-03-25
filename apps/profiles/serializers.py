@@ -10,6 +10,7 @@ from apps.profiles.models import (
     Certification,
     ClientProfile,
     GymProfile,
+    GymTrainer,
     Review,
     Service,
     Specialisation,
@@ -421,3 +422,34 @@ class ReviewSubmitSerializer(serializers.Serializer):
 
 class ReviewResponseSerializer(serializers.Serializer):
     trainer_response = serializers.CharField(min_length=1, required=True)
+
+
+# ---------------------------------------------------------------------------
+# Gym trainer management
+# ---------------------------------------------------------------------------
+
+
+class GymTrainerListItemSerializer(serializers.ModelSerializer):
+    trainer_id = serializers.IntegerField(source="trainer.id", read_only=True)
+    full_name = serializers.CharField(source="trainer.full_name", read_only=True)
+    email = serializers.EmailField(source="trainer.user.email", read_only=True)
+    profile_photo_url = serializers.URLField(
+        source="trainer.profile_photo_url", read_only=True
+    )
+    is_published = serializers.BooleanField(
+        source="trainer.is_published", read_only=True
+    )
+
+    class Meta:
+        model = GymTrainer
+        fields = (
+            "id",
+            "trainer_id",
+            "full_name",
+            "email",
+            "role",
+            "profile_photo_url",
+            "is_published",
+            "created_at",
+        )
+        read_only_fields = fields

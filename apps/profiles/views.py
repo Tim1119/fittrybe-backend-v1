@@ -25,15 +25,18 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.emails import send_gym_trainer_invite_email
+from apps.accounts.models import User
 from apps.core.error_codes import ErrorCode
 from apps.core.pagination import StandardPagination
-from apps.core.permissions import IsTrainer, IsTrainerOrGym
+from apps.core.permissions import IsGym, IsTrainer, IsTrainerOrGym
 from apps.core.responses import APIResponse
 from apps.profiles.models import (
     Availability,
     Certification,
     ClientProfile,
     GymProfile,
+    GymTrainer,
     Review,
     Service,
     Specialisation,
@@ -44,6 +47,7 @@ from apps.profiles.serializers import (
     CoverUploadSerializer,
     GymProfilePublicSerializer,
     GymProfileSerializer,
+    GymTrainerListItemSerializer,
     PhotoUploadSerializer,
     ReviewResponseSerializer,
     ReviewSerializer,
@@ -1697,3 +1701,191 @@ class GymReviewRespondView(APIView):
             data=ReviewSerializer(review).data,
             message="Response saved.",
         )
+
+
+# ---------------------------------------------------------------------------
+# Gym trainer management
+# ---------------------------------------------------------------------------
+
+_MAX_TRAINERS_PER_GYM = 3
+
+
+def _get_gym_trainer_or_404(pk, gym_profile):
+    """Fetch a GymTrainer by pk belonging to this gym, or return a 404 response."""
+    try:
+        return (
+            GymTrainer.objects.select_related("trainer__user").get(
+                pk=pk, gym=gym_profile
+            ),
+            None,
+        )
+    except GymTrainer.DoesNotExist:
+        return None, APIResponse.error(
+            message="Trainer not found.",
+            code=ErrorCode.NOT_FOUND,
+            status_code=404,
+        )
+
+
+@extend_schema(
+    summary="Add a trainer to the gym or list gym trainers",
+    description=(
+        "POST — invite a new trainer to join the gym. Creates their account and "
+        "sends a set-password invite email. Maximum 3 active trainers per gym.\n\n"
+        "GET — list all active trainers belonging to the authenticated gym."
+    ),
+    request=inline_serializer(
+        name="GymTrainerCreateRequest",
+        fields={
+            "email": drf_serializers.EmailField(),
+            "full_name": drf_serializers.CharField(max_length=200),
+        },
+    ),
+    responses={
+        200: OpenApiResponse(description="List of gym trainers"),
+        201: OpenApiResponse(description="Trainer added and invite sent"),
+        400: OpenApiResponse(description="Validation error or trainer limit reached"),
+        403: OpenApiResponse(description="Not a gym admin"),
+    },
+    tags=["Gym Trainers"],
+)
+class GymTrainerCreateListView(APIView):
+    permission_classes = [IsAuthenticated, IsGym]
+
+    def post(self, request):
+        gym_profile = _get_gym_profile(request.user)
+        if gym_profile is None:
+            return APIResponse.error(
+                message="Gym profile not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        active_count = GymTrainer.objects.filter(gym=gym_profile).count()
+        if active_count >= _MAX_TRAINERS_PER_GYM:
+            return APIResponse.error(
+                message=(
+                    "You have reached the maximum of 3 trainers "
+                    "allowed on your plan."
+                ),
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        email = request.data.get("email", "").strip().lower()
+        full_name = request.data.get("full_name", "").strip()
+
+        if not email:
+            return APIResponse.error(
+                message="Email is required.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+        if not full_name:
+            return APIResponse.error(
+                message="Full name is required.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+        if User.objects.filter(email=email).exists():
+            return APIResponse.error(
+                message="A user with this email already exists.",
+                code=ErrorCode.ALREADY_EXISTS,
+                status_code=400,
+            )
+
+        with transaction.atomic():
+            trainer_user = User(
+                email=email,
+                role=User.Role.TRAINER,
+                is_email_verified=True,
+                display_name=full_name,
+            )
+            trainer_user.set_unusable_password()
+            trainer_user.save()
+
+            trainer_profile = TrainerProfile.objects.create(
+                user=trainer_user,
+                trainer_type=TrainerProfile.TrainerType.GYM_TRAINER,
+                gym=gym_profile,
+                full_name=full_name,
+            )
+
+            gym_trainer = GymTrainer.objects.create(
+                gym=gym_profile,
+                trainer=trainer_profile,
+            )
+
+        try:
+            send_gym_trainer_invite_email(trainer_user, gym_profile)
+        except Exception:
+            logger.exception("Failed to send gym trainer invite email to %s", email)
+
+        serializer = GymTrainerListItemSerializer(gym_trainer)
+        return APIResponse.created(
+            data=serializer.data, message="Trainer added and invite sent."
+        )
+
+    def get(self, request):
+        gym_profile = _get_gym_profile(request.user)
+        if gym_profile is None:
+            return APIResponse.success(data=[])
+
+        qs = (
+            GymTrainer.objects.select_related("trainer__user")
+            .filter(gym=gym_profile)
+            .order_by("created_at")
+        )
+        serializer = GymTrainerListItemSerializer(qs, many=True)
+        return APIResponse.success(data=serializer.data)
+
+
+@extend_schema(
+    summary="Get or remove a gym trainer",
+    description=(
+        "GET — retrieve details of a single gym trainer.\n\n"
+        "DELETE — permanently remove the trainer. Hard-deletes the trainer's "
+        "User account and cascades to TrainerProfile and GymTrainer. "
+        "ClientMembership records linked to the trainer remain with trainer=null."
+    ),
+    responses={
+        200: OpenApiResponse(description="Trainer data or deletion confirmed"),
+        403: OpenApiResponse(description="Not a gym admin"),
+        404: OpenApiResponse(description="Trainer not found in this gym"),
+    },
+    tags=["Gym Trainers"],
+)
+class GymTrainerDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsGym]
+
+    def get(self, request, pk):
+        gym_profile = _get_gym_profile(request.user)
+        if gym_profile is None:
+            return APIResponse.error(
+                message="Gym profile not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+        gym_trainer, err = _get_gym_trainer_or_404(pk, gym_profile)
+        if err:
+            return err
+        serializer = GymTrainerListItemSerializer(gym_trainer)
+        return APIResponse.success(data=serializer.data)
+
+    def delete(self, request, pk):
+        gym_profile = _get_gym_profile(request.user)
+        if gym_profile is None:
+            return APIResponse.error(
+                message="Gym profile not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+        gym_trainer, err = _get_gym_trainer_or_404(pk, gym_profile)
+        if err:
+            return err
+
+        trainer_user = gym_trainer.trainer.user
+        with transaction.atomic():
+            trainer_user.hard_delete()
+
+        return APIResponse.success(message="Trainer account deleted.")

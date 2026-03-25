@@ -330,6 +330,35 @@ def send_card_expiring_email(user):
     email.send(fail_silently=False)
 
 
+def send_gym_trainer_invite_email(user, gym_profile):
+    """Send a set-password invite to a newly added gym trainer."""
+    token = PasswordResetTokenGenerator().make_token(user)
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    web_url = f"{settings.FRONTEND_URL}/set-password/?uid={uid}&token={token}"
+    deep_link = f"{_mobile_url()}set-password?uid={uid}&token={token}"
+    trainer_name = user.display_name or get_user_name(user)
+    gym_name = gym_profile.gym_name
+    context = {
+        "trainer_name": trainer_name,
+        "gym_name": gym_name,
+        "set_password_url": web_url,
+        "set_password_deep_link": deep_link,
+        "web_url": settings.FRONTEND_URL,
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": _logo_url(),
+    }
+    html_content = render_to_string("accounts/emails/gym_trainer_invite.html", context)
+    text_content = render_to_string("accounts/emails/gym_trainer_invite.txt", context)
+    email = EmailMultiAlternatives(
+        subject=f"You've been added to {gym_name} — Fit Trybe",
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
+
+
 def send_password_changed_email(user):
     token = PasswordResetTokenGenerator().make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))

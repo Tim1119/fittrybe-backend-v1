@@ -4,6 +4,8 @@ from apps.profiles.views import (
     CoverPhotoUploadView,
     GymReviewListCreateView,
     GymReviewRespondView,
+    GymTrainerCreateListView,
+    GymTrainerDetailView,
     MyProfileView,
     ProfilePhotoUploadView,
     ProfileSearchView,
@@ -36,6 +38,17 @@ urlpatterns = [
         "trainer/<slug:slug>/",
         PublicTrainerProfileView.as_view(),
         name="trainer-public",
+    ),
+    # Gym trainer management (must come before gym/<slug:slug>/ to avoid shadowing)
+    path(
+        "gym/trainers/",
+        GymTrainerCreateListView.as_view(),
+        name="gym-trainers",
+    ),
+    path(
+        "gym/trainers/<int:pk>/",
+        GymTrainerDetailView.as_view(),
+        name="gym-trainer-detail",
     ),
     path("gym/<slug:slug>/", PublicGymProfileView.as_view(), name="gym-public"),
     # Reviews
