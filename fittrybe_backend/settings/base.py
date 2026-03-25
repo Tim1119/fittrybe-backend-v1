@@ -372,6 +372,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.subscriptions.tasks.check_active_subscription_expirations",
         "schedule": crontab(minute="15"),
     },
+    "send-payment-reminders": {
+        "task": "apps.clients.tasks.send_payment_reminders",
+        "schedule": crontab(hour=9, minute=0),
+    },
+    "update-membership-statuses": {
+        "task": "apps.clients.tasks.update_membership_statuses",
+        "schedule": crontab(hour=0, minute=0),
+    },
 }
 
 # ---------------------------------------------------------------------------
