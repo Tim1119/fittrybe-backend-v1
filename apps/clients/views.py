@@ -32,6 +32,28 @@ from apps.core.responses import APIResponse
 logger = logging.getLogger(__name__)
 
 
+def _block_gym_trainer(user):
+    """
+    Returns a 403 error response if user is a gym trainer.
+    Gym trainers cannot manage clients — that belongs to the gym admin.
+    Returns None if the user is allowed to proceed.
+    """
+    if user.role == "trainer":
+        try:
+            if user.trainer_profile.trainer_type == "gym_trainer":
+                return APIResponse.error(
+                    message=(
+                        "Gym trainers cannot manage clients directly. "
+                        "Client management is handled by the gym admin."
+                    ),
+                    code=ErrorCode.PERMISSION_DENIED,
+                    status_code=403,
+                )
+        except Exception:
+            pass
+    return None
+
+
 def _get_membership_or_403(pk, user):
     """
     Fetch a non-deleted ClientMembership by pk and verify ownership.
@@ -142,6 +164,9 @@ class ClientDetailView(APIView):
         return APIResponse.success(data=serializer.data)
 
     def put(self, request, pk):
+        err = _block_gym_trainer(request.user)
+        if err:
+            return err
         membership, err = _get_membership_or_403(pk, request.user)
         if err:
             return err
@@ -159,6 +184,9 @@ class ClientDetailView(APIView):
         return APIResponse.success(data=serializer.data, message="Membership updated.")
 
     def delete(self, request, pk):
+        err = _block_gym_trainer(request.user)
+        if err:
+            return err
         membership, err = _get_membership_or_403(pk, request.user)
         if err:
             return err
@@ -184,6 +212,9 @@ class ClientReminderView(APIView):
     permission_classes = [IsAuthenticated, IsTrainerOrGym]
 
     def post(self, request, pk):
+        err = _block_gym_trainer(request.user)
+        if err:
+            return err
         membership, err = _get_membership_or_403(pk, request.user)
         if err:
             return err
@@ -235,6 +266,10 @@ class InviteCreateListView(APIView):
     permission_classes = [IsAuthenticated, IsTrainerOrGym]
 
     def post(self, request):
+        err = _block_gym_trainer(request.user)
+        if err:
+            return err
+
         expires_at = request.data.get("expires_at")
         max_uses = request.data.get("max_uses")
 
@@ -309,6 +344,10 @@ class InviteDeactivateView(APIView):
     permission_classes = [IsAuthenticated, IsTrainerOrGym]
 
     def delete(self, request, token):
+        err = _block_gym_trainer(request.user)
+        if err:
+            return err
+
         try:
             invite = InviteLink.objects.get(token=token)
         except InviteLink.DoesNotExist:
