@@ -1,0 +1,21 @@
+----
+FIT TRYBE
+----
+
+ACCOUNT TEMPORARILY LOCKED
+---------------------------
+
+Your Fit Trybe account ({{ user_email }}) has been temporarily
+locked after 3 failed login attempts.
+
+Your account will automatically unlock in 15 minutes.
+If this was not you, we recommend resetting your password immediately.
+
+RESET PASSWORD IN BROWSER: {{ web_url }}
+
+Contact Support: support@fittrybe.com
+
+----
+Open in app: {{ mobile_url }}
+Web: {{ frontend_url }}
+----

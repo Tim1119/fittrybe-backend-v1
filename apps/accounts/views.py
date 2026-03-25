@@ -88,11 +88,31 @@ def _get_onboarding_data(user, is_first_login):
     }
 
 
+def _get_effective_subscription(user):
+    """
+    Return the subscription governing this user's access.
+    Gym trainers are covered by their gym's Pro Plan subscription.
+    """
+    if user.role == "trainer":
+        try:
+            profile = user.trainer_profile
+            if profile.trainer_type == "gym_trainer" and profile.gym:
+                return profile.gym.user.subscription
+        except Exception:
+            pass
+    try:
+        return user.subscription
+    except Exception:
+        return None
+
+
 def _get_subscription_data(user):
     if user.role == "client":
         return None
     try:
-        sub = user.subscription
+        sub = _get_effective_subscription(user)
+        if sub is None:
+            return None
         return {
             "status": sub.status,
             "plan": sub.plan.plan,

@@ -250,21 +250,23 @@ class Command(BaseCommand):
             session_type="both",
         )
 
-        try:
-            plan = PlanConfig.objects.get(plan="basic")
-            now = timezone.now()
-            Subscription.objects.get_or_create(
-                user=user,
-                defaults={
-                    "plan": plan,
-                    "status": "active",
-                    "trial_end": now + timezone.timedelta(days=14),
-                    "current_period_start": now,
-                    "current_period_end": now + timezone.timedelta(days=30),
-                },
-            )
-        except PlanConfig.DoesNotExist:
-            pass
+        # Gym trainers are covered by the gym's Pro Plan — no own subscription
+        if gym is None:
+            try:
+                plan = PlanConfig.objects.get(plan="basic")
+                now = timezone.now()
+                Subscription.objects.get_or_create(
+                    user=user,
+                    defaults={
+                        "plan": plan,
+                        "status": "active",
+                        "trial_end": now + timezone.timedelta(days=14),
+                        "current_period_start": now,
+                        "current_period_end": now + timezone.timedelta(days=30),
+                    },
+                )
+            except PlanConfig.DoesNotExist:
+                pass
 
         if gym:
             GymTrainer.objects.get_or_create(

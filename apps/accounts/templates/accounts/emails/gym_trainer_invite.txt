@@ -1,0 +1,20 @@
+----
+FIT TRYBE
+----
+
+Hi {{ trainer_name }},
+
+YOU'VE BEEN ADDED TO {{ gym_name|upper }}
+-----------------------------------------
+
+{{ gym_name }} has added you as a trainer on Fit Trybe.
+Set up your password to get started and access your trainer dashboard.
+
+This link expires in 48 hours.
+
+SET UP MY ACCOUNT: {{ set_password_url }}
+
+----
+Open in app: {{ set_password_deep_link }}
+Web: {{ web_url }}
+----

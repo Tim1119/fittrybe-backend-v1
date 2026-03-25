@@ -1,0 +1,26 @@
+----
+FIT TRYBE
+----
+
+PAYMENT FAILED
+--------------
+
+Hi {{ user_name }},
+
+We were unable to process your Fit Trybe subscription payment
+(attempt {{ retry_count }}).
+
+Paystack will attempt to charge again on your next billing date.
+To avoid losing access, please update your payment method.
+
+After 3 failed payments your account will enter a grace period.
+Update your card now to stay uninterrupted.
+
+UPDATE PAYMENT METHOD: {{ web_url }}
+
+Contact Support: support@fittrybe.com
+
+----
+Open in app: {{ mobile_url }}
+Web: {{ frontend_url }}
+----

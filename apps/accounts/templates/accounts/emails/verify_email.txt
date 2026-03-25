@@ -1,0 +1,21 @@
+----
+FIT TRYBE
+----
+
+Hi {{ user_name }},
+
+VERIFY YOUR ACCOUNT
+-------------------
+
+Thank you for joining Fit Trybe as a {{ user_role|title }}.
+To activate your account and start your fitness journey, please
+verify your email address.
+
+This link expires in 24 hours.
+
+VERIFY IN BROWSER: {{ web_url }}
+
+----
+Open in app: {{ mobile_url }}
+Web: {{ frontend_url }}
+----

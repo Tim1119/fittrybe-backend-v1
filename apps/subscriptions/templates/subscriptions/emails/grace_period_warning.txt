@@ -1,0 +1,24 @@
+----
+FIT TRYBE
+----
+
+SUBSCRIPTION EXPIRED — ACTION REQUIRED
+---------------------------------------
+
+Renew to keep your access, {{ user_email }}.
+
+Your Fit Trybe subscription has expired. You are currently in a
+grace period — your account is still accessible but will be locked
+if you do not renew.
+
+Grace period ends: {{ grace_period_end|date:"F j, Y" }}.
+After this date your account will be locked until you renew.
+
+RENEW IN BROWSER: {{ web_url }}
+
+Contact Support: support@fittrybe.com
+
+----
+Open in app: {{ mobile_url }}
+Web: {{ frontend_url }}
+----

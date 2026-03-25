@@ -1,0 +1,31 @@
+----
+FIT TRYBE
+----
+
+You're officially in, {{ user_name }}!
+
+WELCOME TO FIT TRYBE
+--------------------
+
+{% if user_role == 'trainer' %}
+Your trainer profile is ready to set up. Add your expertise,
+availability, and start building your community.
+{% elif user_role == 'gym' %}
+Your gym account is active. Set up your profile, add your
+trainers, and launch your community today.
+{% else %}
+You can now connect with trainers, join communities, and
+start your fitness journey.
+{% endif %}
+
+What's waiting for you:
+  - Community rooms to connect with your clients
+  - Direct messaging
+  - Marketplace for fitness products
+
+OPEN IN APP: {{ mobile_url }}
+WEB: {{ web_url }}
+
+----
+Web: {{ frontend_url }}
+----

@@ -1,0 +1,68 @@
+{% extends "accounts/emails/base_email.html" %}
+
+{% block title %}Payment Reminder — Fit Trybe{% endblock %}
+
+{% block banner %}
+<tr>
+  <td style="background-color:#1A1A2E;padding:32px 40px;text-align:center;">
+    <p style="font-size:32px;margin:0 0 8px;">&#128179;</p>
+    <h1 style="color:#E8490F;font-size:22px;margin:0;font-weight:bold;">
+      Payment Reminder
+    </h1>
+  </td>
+</tr>
+{% endblock %}
+
+{% block content %}
+<h2 style="color:#1A1A2E;font-size:20px;margin:0 0 16px;">
+  Hi {{ client_name }},
+</h2>
+<p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 20px;">
+  This is a reminder that your membership with
+  <strong>{{ trainer_or_gym_name }}</strong> is due for renewal.
+</p>
+<div style="border-left:4px solid #E8490F;padding:12px 16px;background-color:#FFF7F5;
+            border-radius:0 4px 4px 0;margin:0 0 20px;">
+  <p style="color:#374151;font-size:13px;margin:0 0 6px;line-height:1.5;">
+    <strong>Renewal Date:</strong> {{ renewal_date }}
+  </p>
+  <p style="color:#374151;font-size:13px;margin:0;line-height:1.5;">
+    <strong>Amount:</strong>
+    {% if payment_amount %}
+      {{ payment_currency }} {{ payment_amount }}
+    {% else %}
+      As agreed
+    {% endif %}
+  </p>
+</div>
+{% if payment_notes %}
+<p style="color:#6B7280;font-size:13px;line-height:1.6;margin:0;">
+  <em>Note from {{ trainer_or_gym_name }}: {{ payment_notes }}</em>
+</p>
+{% endif %}
+{% endblock %}
+
+{% block cta %}
+<tr>
+  <td style="padding:0 40px 40px;text-align:center;">
+    <a href="{{ web_url }}/messages"
+       style="display:inline-block;background-color:#E8490F;color:#FFFFFF;
+              text-decoration:none;padding:14px 36px;border-radius:8px;
+              font-size:15px;font-weight:bold;letter-spacing:0.5px;margin-bottom:12px;">
+      Message {{ trainer_or_gym_name }}
+    </a>
+    <br>
+    <a href="{{ mobile_url }}messages"
+       style="display:inline-block;background-color:transparent;color:#E8490F;
+              text-decoration:none;padding:12px 36px;border-radius:8px;
+              font-size:14px;font-weight:bold;letter-spacing:0.5px;
+              border:2px solid #E8490F;">
+      Open in App
+    </a>
+    <p style="color:#9CA3AF;font-size:12px;margin:16px 0 0;">
+      Or copy the link:<br>
+      <span style="color:#E8490F;word-break:break-all;">{{ web_url }}/messages</span>
+    </p>
+  </td>
+</tr>
+{% endblock %}

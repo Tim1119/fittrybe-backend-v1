@@ -9,6 +9,28 @@ from django.utils.timezone import now
 
 logger = logging.getLogger(__name__)
 
+
+def _get_effective_subscription(user):
+    """
+    Return the subscription that governs this user's access.
+
+    Gym trainers are sub-users covered by their gym's Pro Plan,
+    so we look up the gym's subscription rather than the trainer's own.
+    All other roles return their own subscription.
+    """
+    if user.role == "trainer":
+        try:
+            profile = user.trainer_profile
+            if profile.trainer_type == "gym_trainer" and profile.gym:
+                return profile.gym.user.subscription
+        except Exception:
+            pass
+    try:
+        return user.subscription
+    except Exception:
+        return None
+
+
 EXEMPT_PATHS = [
     "/api/v1/auth/",
     "/api/v1/subscriptions/webhook/",
@@ -62,8 +84,8 @@ class SubscriptionGateMiddleware:
             return self.get_response(request)
 
         try:
-            sub = user.subscription
-            if not sub.is_access_allowed():
+            sub = _get_effective_subscription(user)
+            if sub and not sub.is_access_allowed():
                 return JsonResponse(
                     {
                         "status": "error",

@@ -6,7 +6,6 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 
 from apps.core.models import BaseModel
@@ -41,7 +40,7 @@ class ClientMembership(BaseModel):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.PENDING,
+        default=Status.ACTIVE,
         db_index=True,
     )
     renewal_date = models.DateField(null=True, blank=True)
@@ -53,20 +52,6 @@ class ClientMembership(BaseModel):
     last_reminder_at = models.DateTimeField(null=True, blank=True)
     sessions_count = models.IntegerField(default=0)
     notes = models.TextField(blank=True)
-
-    class Meta:
-        constraints = [
-            UniqueConstraint(
-                fields=["client", "trainer"],
-                condition=Q(trainer__isnull=False),
-                name="unique_client_trainer",
-            ),
-            UniqueConstraint(
-                fields=["client", "gym"],
-                condition=Q(gym__isnull=False),
-                name="unique_client_gym",
-            ),
-        ]
 
     def clean(self):
         if bool(self.trainer_id) == bool(self.gym_id):

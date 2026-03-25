@@ -1,0 +1,23 @@
+----
+FIT TRYBE
+----
+
+YOUR SUBSCRIPTION HAS EXPIRED
+------------------------------
+
+Hi {{ user_name }},
+
+Your Fit Trybe account ({{ user_email }}) has been locked
+because your subscription has expired.
+
+Renew your subscription to immediately restore access to all
+Fit Trybe features.
+
+RENEW SUBSCRIPTION: {{ web_url }}
+
+Contact Support: support@fittrybe.com
+
+----
+Open in app: {{ mobile_url }}
+Web: {{ frontend_url }}
+----

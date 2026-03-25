@@ -1,0 +1,22 @@
+----
+FIT TRYBE
+----
+
+TRIAL ENDING IN {{ days_remaining }} DAY{{ days_remaining|pluralize|upper }}
+-------------------------------------------------------------
+
+Don't lose access, {{ user_email }}.
+
+Your Fit Trybe free trial expires in
+{{ days_remaining }} day{{ days_remaining|pluralize }}.
+Upgrade now to keep full access to all features.
+
+Trial ends: {{ trial_end|date:"F j, Y" }}.
+After that, a 7-day grace period begins before your account is locked.
+
+UPGRADE IN BROWSER: {{ web_url }}
+
+----
+Open in app: {{ mobile_url }}
+Web: {{ frontend_url }}
+----

@@ -1,0 +1,25 @@
+----
+FIT TRYBE
+----
+
+CARD EXPIRING SOON
+------------------
+
+Hi {{ user_name }},
+
+The payment card linked to your Fit Trybe subscription is expiring soon.
+
+Please update your payment method before your card expires to avoid
+any interruption to your Fit Trybe subscription.
+
+If your card expires and we cannot charge it, your subscription may
+enter a grace period.
+
+UPDATE PAYMENT METHOD: {{ web_url }}
+
+Contact Support: support@fittrybe.com
+
+----
+Open in app: {{ mobile_url }}
+Web: {{ frontend_url }}
+----
