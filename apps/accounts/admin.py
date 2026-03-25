@@ -7,9 +7,16 @@ from .models import User
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     model = User
-    list_display = ("email", "role", "is_email_verified", "is_active", "created_at")
+    list_display = (
+        "email",
+        "role",
+        "is_email_verified",
+        "is_active",
+        "onboarding_status",
+        "created_at",
+    )
     list_filter = ("role", "is_active", "is_email_verified")
-    search_fields = ("email",)
+    search_fields = ("email", "display_name")
     ordering = ("-created_at",)
     fieldsets = (
         (None, {"fields": ("email", "password")}),

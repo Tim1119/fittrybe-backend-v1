@@ -6,6 +6,7 @@ from apps.profiles.models import (
     ClientProfile,
     GymProfile,
     GymTrainer,
+    Review,
     Service,
     Specialisation,
     TrainerProfile,
@@ -62,11 +63,12 @@ class ServiceGymInline(admin.TabularInline):
 class TrainerProfileAdmin(admin.ModelAdmin):
     list_display = (
         "full_name",
-        "user",
+        "slug",
         "trainer_type",
+        "gym",
         "is_published",
-        "wizard_step",
         "avg_rating",
+        "wizard_step",
     )
     list_filter = ("trainer_type", "is_published", "wizard_completed")
     search_fields = ("full_name", "user__email", "location")
@@ -79,9 +81,9 @@ class TrainerProfileAdmin(admin.ModelAdmin):
 class GymProfileAdmin(admin.ModelAdmin):
     list_display = (
         "gym_name",
-        "user",
-        "city",
+        "slug",
         "is_published",
+        "avg_rating",
         "wizard_step",
     )
     list_filter = ("is_published", "wizard_completed")
@@ -101,7 +103,7 @@ class SpecialisationAdmin(admin.ModelAdmin):
 
 @admin.register(GymTrainer)
 class GymTrainerAdmin(admin.ModelAdmin):
-    list_display = ("trainer", "gym", "role")
+    list_display = ("gym", "trainer", "role", "created_at")
     list_filter = ("role",)
     raw_id_fields = ("trainer", "gym")
 
@@ -116,7 +118,41 @@ class ServiceAdmin(admin.ModelAdmin):
 
 @admin.register(ClientProfile)
 class ClientProfileAdmin(admin.ModelAdmin):
-    list_display = ("username", "display_name", "user")
+    list_display = ("display_name", "username", "get_user_email", "created_at")
     search_fields = ("username", "user__email", "display_name")
     raw_id_fields = ("user",)
     readonly_fields = ("username", "created_at", "updated_at")
+
+    @admin.display(description="Email")
+    def get_user_email(self, obj):
+        return obj.user.email
+
+
+@admin.register(Availability)
+class AvailabilityAdmin(admin.ModelAdmin):
+    list_display = (
+        "day_of_week",
+        "trainer",
+        "gym",
+        "start_time",
+        "end_time",
+        "session_type",
+    )
+    list_filter = ("day_of_week", "session_type")
+    raw_id_fields = ("trainer", "gym")
+
+
+@admin.register(Certification)
+class CertificationAdmin(admin.ModelAdmin):
+    list_display = ("name", "issuing_body", "year_obtained", "trainer")
+    search_fields = ("name", "trainer__full_name")
+    raw_id_fields = ("trainer",)
+
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ("client", "trainer", "gym", "rating", "created_at")
+    list_filter = ("rating",)
+    search_fields = ("client__user__email", "trainer__full_name", "gym__gym_name")
+    raw_id_fields = ("client", "trainer", "gym")
+    readonly_fields = ("created_at", "updated_at")
