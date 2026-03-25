@@ -2,12 +2,16 @@ from django.urls import path
 
 from apps.profiles.views import (
     CoverPhotoUploadView,
+    GymReviewListCreateView,
+    GymReviewRespondView,
     MyProfileView,
     ProfilePhotoUploadView,
     ProfileSearchView,
     PublicGymProfileView,
     PublicTrainerProfileView,
     SpecialisationListView,
+    TrainerReviewListCreateView,
+    TrainerReviewRespondView,
     WizardStatusView,
     WizardStep1View,
     WizardStep2View,
@@ -34,4 +38,25 @@ urlpatterns = [
         name="trainer-public",
     ),
     path("gym/<slug:slug>/", PublicGymProfileView.as_view(), name="gym-public"),
+    # Reviews
+    path(
+        "trainer/<slug:slug>/reviews/",
+        TrainerReviewListCreateView.as_view(),
+        name="trainer-reviews",
+    ),
+    path(
+        "trainer/<slug:slug>/reviews/<int:review_id>/respond/",
+        TrainerReviewRespondView.as_view(),
+        name="trainer-review-respond",
+    ),
+    path(
+        "gym/<slug:slug>/reviews/",
+        GymReviewListCreateView.as_view(),
+        name="gym-reviews",
+    ),
+    path(
+        "gym/<slug:slug>/reviews/<int:review_id>/respond/",
+        GymReviewRespondView.as_view(),
+        name="gym-review-respond",
+    ),
 ]

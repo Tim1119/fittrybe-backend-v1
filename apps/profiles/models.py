@@ -1,6 +1,6 @@
 """
 Profile models — Specialisation, TrainerProfile, GymProfile,
-GymTrainer, Availability, Certification, Service, ClientProfile.
+GymTrainer, Availability, Certification, Service, ClientProfile, Review.
 """
 
 from decimal import Decimal
@@ -401,3 +401,48 @@ class ClientProfile(BaseModel):
 
     def __str__(self):
         return f"{self.username} ({self.user.email})"
+
+
+class Review(BaseModel):
+    """
+    A star-rating and written review left by a client for a trainer or gym.
+    Exactly one of trainer / gym must be set (enforced by clean()).
+    """
+
+    client = models.ForeignKey(
+        ClientProfile,
+        on_delete=models.CASCADE,
+        related_name="reviews",
+    )
+    trainer = models.ForeignKey(
+        TrainerProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviews",
+    )
+    gym = models.ForeignKey(
+        GymProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviews",
+    )
+    rating = models.PositiveSmallIntegerField()
+    content = models.TextField(max_length=500)
+    trainer_response = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Review"
+        verbose_name_plural = "Reviews"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        if bool(self.trainer_id) == bool(self.gym_id):
+            raise ValidationError(
+                "Set exactly one of trainer or gym, not both or neither."
+            )
+
+    def __str__(self):
+        target = self.trainer or self.gym
+        return f"Review({self.rating}★) by {self.client} → {target}"

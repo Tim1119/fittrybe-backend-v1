@@ -34,6 +34,7 @@ from apps.profiles.models import (
     Certification,
     ClientProfile,
     GymProfile,
+    Review,
     Service,
     Specialisation,
     TrainerProfile,
@@ -44,6 +45,9 @@ from apps.profiles.serializers import (
     GymProfilePublicSerializer,
     GymProfileSerializer,
     PhotoUploadSerializer,
+    ReviewResponseSerializer,
+    ReviewSerializer,
+    ReviewSubmitSerializer,
     SpecialisationSerializer,
     TrainerProfilePublicSerializer,
     TrainerProfileSerializer,
@@ -1270,4 +1274,426 @@ class PublicGymProfileHTMLView(View):
                 "app_store_url": settings.APP_STORE_URL,
                 "play_store_url": settings.PLAY_STORE_URL,
             },
+        )
+
+
+# ---------------------------------------------------------------------------
+# Reviews — helpers
+# ---------------------------------------------------------------------------
+
+
+def _recalculate_rating(profile):
+    """Recalculate avg_rating and rating_count after any review change."""
+    from django.db.models import Avg, Count
+
+    is_trainer = hasattr(profile, "full_name")
+    filter_kwargs = {"trainer": profile} if is_trainer else {"gym": profile}
+    agg = Review.objects.filter(deleted_at__isnull=True, **filter_kwargs).aggregate(
+        avg=Avg("rating"), count=Count("id")
+    )
+    profile.avg_rating = round(agg["avg"] or 0, 2)
+    profile.rating_count = agg["count"] or 0
+    profile.save(update_fields=["avg_rating", "rating_count"])
+
+
+def _check_membership(client_profile, trainer=None, gym=None):
+    """
+    Returns True if client has an active (non-deleted) membership
+    with the given trainer or gym.
+    """
+    from apps.clients.models import ClientMembership
+
+    filter_kwargs = {"client": client_profile, "deleted_at__isnull": True}
+    if trainer:
+        filter_kwargs["trainer"] = trainer
+    if gym:
+        filter_kwargs["gym"] = gym
+    return ClientMembership.objects.filter(**filter_kwargs).exists()
+
+
+def _build_rating_distribution(reviews_qs):
+    from django.db.models import Count
+
+    dist = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    rows = reviews_qs.values("rating").annotate(count=Count("id"))
+    for row in rows:
+        dist[row["rating"]] = row["count"]
+    return dist
+
+
+# ---------------------------------------------------------------------------
+# Reviews — views
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(
+    summary="List or submit reviews for a trainer",
+    description=(
+        "GET — public. Returns paginated reviews for a published trainer "
+        "with summary stats (avg_rating, total_reviews, rating_distribution).\n\n"
+        "POST — requires authentication. Only clients with an active membership "
+        "with this trainer may submit a review. One review per client per trainer."
+    ),
+    responses={
+        200: OpenApiResponse(description="Paginated reviews with summary"),
+        201: OpenApiResponse(description="Review created"),
+        400: OpenApiResponse(description="Invalid data or duplicate review"),
+        401: OpenApiResponse(description="Not authenticated (POST only)"),
+        403: OpenApiResponse(description="Not a client or no active membership"),
+        404: OpenApiResponse(description="Trainer not found or not published"),
+    },
+    tags=["Reviews"],
+)
+class TrainerReviewListCreateView(APIView):
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get(self, request, slug):
+        try:
+            profile = TrainerProfile.objects.get(slug=slug, is_published=True)
+        except TrainerProfile.DoesNotExist:
+            return APIResponse.error(
+                message="Trainer not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        reviews_qs = (
+            Review.objects.filter(trainer=profile, deleted_at__isnull=True)
+            .select_related("client")
+            .order_by("-created_at")
+        )
+
+        dist = _build_rating_distribution(reviews_qs)
+
+        summary = {
+            "avg_rating": float(profile.avg_rating),
+            "total_reviews": reviews_qs.count(),
+            "rating_distribution": dist,
+        }
+
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(reviews_qs, request)
+        serializer = ReviewSerializer(page, many=True)
+        paginated = paginator.get_paginated_response(serializer.data)
+        paginated.data["summary"] = summary
+        return paginated
+
+    def post(self, request, slug):
+        if request.user.role != "client":
+            return APIResponse.error(
+                message="Only clients can submit reviews.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+
+        try:
+            profile = TrainerProfile.objects.get(slug=slug, is_published=True)
+        except TrainerProfile.DoesNotExist:
+            return APIResponse.error(
+                message="Trainer not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        client_profile = _get_client_profile(request.user)
+        if client_profile is None:
+            return APIResponse.error(
+                message="Client profile not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        if not _check_membership(client_profile, trainer=profile):
+            return APIResponse.error(
+                message="You can only review trainers you are a member of.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+
+        serializer = ReviewSubmitSerializer(data=request.data)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid review data.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        if Review.objects.filter(
+            client=client_profile,
+            trainer=profile,
+            deleted_at__isnull=True,
+        ).exists():
+            return APIResponse.error(
+                message="You have already reviewed this trainer.",
+                code=ErrorCode.ALREADY_EXISTS,
+                status_code=400,
+            )
+
+        with transaction.atomic():
+            review = Review.objects.create(
+                client=client_profile,
+                trainer=profile,
+                rating=serializer.validated_data["rating"],
+                content=serializer.validated_data["content"],
+            )
+            _recalculate_rating(profile)
+
+        return APIResponse.created(
+            data=ReviewSerializer(review).data,
+            message="Review submitted.",
+        )
+
+
+@extend_schema(
+    summary="Respond to a trainer review",
+    description=(
+        "Allows the trainer (profile owner) to add or update a response "
+        "to a specific review on their profile. "
+        "Returns 403 if the authenticated user is not the profile owner."
+    ),
+    request=ReviewResponseSerializer,
+    responses={
+        200: OpenApiResponse(description="Response saved"),
+        400: OpenApiResponse(description="Empty response"),
+        403: OpenApiResponse(description="Not the profile owner"),
+        404: OpenApiResponse(description="Profile or review not found"),
+    },
+    tags=["Reviews"],
+)
+class TrainerReviewRespondView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug, review_id):
+        try:
+            profile = TrainerProfile.objects.get(slug=slug)
+        except TrainerProfile.DoesNotExist:
+            return APIResponse.error(
+                message="Trainer not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        if request.user != profile.user:
+            return APIResponse.error(
+                message="You are not the owner of this profile.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+
+        try:
+            review = Review.objects.get(
+                id=review_id, trainer=profile, deleted_at__isnull=True
+            )
+        except Review.DoesNotExist:
+            return APIResponse.error(
+                message="Review not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        serializer = ReviewResponseSerializer(data=request.data)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid response.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        review.trainer_response = serializer.validated_data["trainer_response"]
+        review.save(update_fields=["trainer_response"])
+
+        return APIResponse.success(
+            data=ReviewSerializer(review).data,
+            message="Response saved.",
+        )
+
+
+@extend_schema(
+    summary="List or submit reviews for a gym",
+    description=(
+        "GET — public. Returns paginated reviews for a published gym "
+        "with summary stats (avg_rating, total_reviews, rating_distribution).\n\n"
+        "POST — requires authentication. Only clients with an active membership "
+        "with this gym may submit a review. One review per client per gym."
+    ),
+    responses={
+        200: OpenApiResponse(description="Paginated reviews with summary"),
+        201: OpenApiResponse(description="Review created"),
+        400: OpenApiResponse(description="Invalid data or duplicate review"),
+        401: OpenApiResponse(description="Not authenticated (POST only)"),
+        403: OpenApiResponse(description="Not a client or no active membership"),
+        404: OpenApiResponse(description="Gym not found or not published"),
+    },
+    tags=["Reviews"],
+)
+class GymReviewListCreateView(APIView):
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get(self, request, slug):
+        try:
+            profile = GymProfile.objects.get(slug=slug, is_published=True)
+        except GymProfile.DoesNotExist:
+            return APIResponse.error(
+                message="Gym not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        reviews_qs = (
+            Review.objects.filter(gym=profile, deleted_at__isnull=True)
+            .select_related("client")
+            .order_by("-created_at")
+        )
+
+        dist = _build_rating_distribution(reviews_qs)
+
+        summary = {
+            "avg_rating": float(profile.avg_rating),
+            "total_reviews": reviews_qs.count(),
+            "rating_distribution": dist,
+        }
+
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(reviews_qs, request)
+        serializer = ReviewSerializer(page, many=True)
+        paginated = paginator.get_paginated_response(serializer.data)
+        paginated.data["summary"] = summary
+        return paginated
+
+    def post(self, request, slug):
+        if request.user.role != "client":
+            return APIResponse.error(
+                message="Only clients can submit reviews.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+
+        try:
+            profile = GymProfile.objects.get(slug=slug, is_published=True)
+        except GymProfile.DoesNotExist:
+            return APIResponse.error(
+                message="Gym not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        client_profile = _get_client_profile(request.user)
+        if client_profile is None:
+            return APIResponse.error(
+                message="Client profile not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        if not _check_membership(client_profile, gym=profile):
+            return APIResponse.error(
+                message="You can only review gyms you are a member of.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+
+        serializer = ReviewSubmitSerializer(data=request.data)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid review data.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        if Review.objects.filter(
+            client=client_profile,
+            gym=profile,
+            deleted_at__isnull=True,
+        ).exists():
+            return APIResponse.error(
+                message="You have already reviewed this gym.",
+                code=ErrorCode.ALREADY_EXISTS,
+                status_code=400,
+            )
+
+        with transaction.atomic():
+            review = Review.objects.create(
+                client=client_profile,
+                gym=profile,
+                rating=serializer.validated_data["rating"],
+                content=serializer.validated_data["content"],
+            )
+            _recalculate_rating(profile)
+
+        return APIResponse.created(
+            data=ReviewSerializer(review).data,
+            message="Review submitted.",
+        )
+
+
+@extend_schema(
+    summary="Respond to a gym review",
+    description=(
+        "Allows the gym admin (profile owner) to add or update a response "
+        "to a specific review on their gym profile."
+    ),
+    request=ReviewResponseSerializer,
+    responses={
+        200: OpenApiResponse(description="Response saved"),
+        400: OpenApiResponse(description="Empty response"),
+        403: OpenApiResponse(description="Not the profile owner"),
+        404: OpenApiResponse(description="Profile or review not found"),
+    },
+    tags=["Reviews"],
+)
+class GymReviewRespondView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug, review_id):
+        try:
+            profile = GymProfile.objects.get(slug=slug)
+        except GymProfile.DoesNotExist:
+            return APIResponse.error(
+                message="Gym not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        if request.user != profile.user:
+            return APIResponse.error(
+                message="You are not the owner of this profile.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+
+        try:
+            review = Review.objects.get(
+                id=review_id, gym=profile, deleted_at__isnull=True
+            )
+        except Review.DoesNotExist:
+            return APIResponse.error(
+                message="Review not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        serializer = ReviewResponseSerializer(data=request.data)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid response.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        review.trainer_response = serializer.validated_data["trainer_response"]
+        review.save(update_fields=["trainer_response"])
+
+        return APIResponse.success(
+            data=ReviewSerializer(review).data,
+            message="Response saved.",
         )

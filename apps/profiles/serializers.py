@@ -10,6 +10,7 @@ from apps.profiles.models import (
     Certification,
     ClientProfile,
     GymProfile,
+    Review,
     Service,
     Specialisation,
     TrainerProfile,
@@ -385,3 +386,38 @@ class PhotoUploadSerializer(serializers.Serializer):
 
 class CoverUploadSerializer(serializers.Serializer):
     cover = serializers.ImageField()
+
+
+# ---------------------------------------------------------------------------
+# Reviews
+# ---------------------------------------------------------------------------
+
+
+class ReviewClientSerializer(serializers.Serializer):
+    display_name = serializers.CharField(read_only=True)
+    profile_photo_url = serializers.URLField(read_only=True)
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    client = ReviewClientSerializer(read_only=True)
+
+    class Meta:
+        model = Review
+        fields = (
+            "id",
+            "rating",
+            "content",
+            "trainer_response",
+            "client",
+            "created_at",
+        )
+        read_only_fields = ("id", "trainer_response", "client", "created_at")
+
+
+class ReviewSubmitSerializer(serializers.Serializer):
+    rating = serializers.IntegerField(min_value=1, max_value=5, required=True)
+    content = serializers.CharField(min_length=1, max_length=500, required=True)
+
+
+class ReviewResponseSerializer(serializers.Serializer):
+    trainer_response = serializers.CharField(min_length=1, required=True)
