@@ -15,6 +15,10 @@ class ClientProfileMiniSerializer(serializers.Serializer):
     profile_photo_url = serializers.URLField(read_only=True)
 
 
+# Alias — same shape as ClientProfileMiniSerializer, used by the search endpoint
+ClientSearchResultSerializer = ClientProfileMiniSerializer
+
+
 class TrainerMiniSerializer(serializers.Serializer):
     id = serializers.UUIDField(source="user.id", read_only=True)
     full_name = serializers.CharField(read_only=True)

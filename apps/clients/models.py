@@ -107,5 +107,10 @@ class InviteLink(models.Model):
             )
 
     def __str__(self):
-        owner = self.trainer.full_name if self.trainer_id else self.gym.gym_name
-        return f"Invite({owner}) uses={self.uses_count}"
+        if self.trainer:
+            owner = self.trainer.full_name
+        elif self.gym:
+            owner = self.gym.gym_name
+        else:
+            owner = "Unknown"
+        return f"InviteLink({self.token[:8]}...) → {owner}"

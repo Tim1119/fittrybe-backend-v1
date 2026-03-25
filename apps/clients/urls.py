@@ -26,4 +26,6 @@ urlpatterns = [
         views.InviteAcceptView.as_view(),
         name="invite-accept",
     ),
+    path("search/", views.ClientSearchView.as_view(), name="client-search"),
+    path("add/", views.ClientDirectAddView.as_view(), name="client-direct-add"),
 ]

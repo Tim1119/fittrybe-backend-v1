@@ -21,6 +21,7 @@ from apps.clients.emails import send_client_reminder_email
 from apps.clients.models import ClientMembership, InviteLink
 from apps.clients.serializers import (
     ClientMembershipSerializer,
+    ClientSearchResultSerializer,
     InviteLinkSerializer,
     InvitePreviewSerializer,
 )
@@ -512,4 +513,175 @@ class InviteAcceptView(APIView):
         return APIResponse.created(
             data=serializer.data,
             message=f"You have joined {owner_name}'s community.",
+        )
+
+
+@extend_schema(
+    summary="Search for a client by username",
+    description=(
+        "Returns up to 10 active ClientProfiles whose username contains the "
+        "given query string (case-insensitive).\n\n"
+        "The `username` query parameter is required. "
+        "Returns an empty list with a helpful message when no match is found.\n\n"
+        "Gym trainers are blocked — client management belongs to the gym admin."
+    ),
+    parameters=[
+        OpenApiParameter(
+            name="username",
+            location=OpenApiParameter.QUERY,
+            description="Username search term (partial match allowed)",
+            required=True,
+            type=str,
+        ),
+    ],
+    responses={
+        200: OpenApiResponse(description="List of matching client profiles"),
+        400: OpenApiResponse(description="username param missing"),
+        401: OpenApiResponse(description="Not authenticated"),
+        403: OpenApiResponse(description="Not a trainer or gym, or gym trainer"),
+    },
+    tags=["Clients"],
+)
+class ClientSearchView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def get(self, request):
+        err = _block_gym_trainer(request.user)
+        if err:
+            return err
+
+        username = request.query_params.get("username", "").strip()
+        if not username:
+            return APIResponse.error(
+                message="username query parameter is required.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        from apps.profiles.models import ClientProfile
+
+        profiles = ClientProfile.objects.filter(
+            username__icontains=username,
+            deleted_at__isnull=True,
+        ).select_related("user")[:10]
+
+        serializer = ClientSearchResultSerializer(profiles, many=True)
+        if not serializer.data:
+            return APIResponse.success(
+                data=[],
+                message="No account found. Share the invite link instead.",
+            )
+        return APIResponse.success(data=serializer.data)
+
+
+@extend_schema(
+    summary="Directly add a client by username",
+    description=(
+        "Looks up an existing ClientProfile by exact username and creates an "
+        "active ClientMembership linking the client to the authenticated "
+        "trainer or gym.\n\n"
+        "Returns 404 if no profile matches, 400 if the account is not a client "
+        "role or the client is already a member, 403 if the caller is a gym trainer."
+    ),
+    request=inline_serializer(
+        name="DirectAddRequest",
+        fields={
+            "username": drf_serializers.CharField(),
+        },
+    ),
+    responses={
+        201: OpenApiResponse(description="Client added — membership created"),
+        400: OpenApiResponse(description="Not a client account or already a member"),
+        403: OpenApiResponse(description="Not a trainer or gym, or gym trainer"),
+        404: OpenApiResponse(description="No client found with that username"),
+    },
+    tags=["Clients"],
+)
+class ClientDirectAddView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def post(self, request):
+        err = _block_gym_trainer(request.user)
+        if err:
+            return err
+
+        username = request.data.get("username", "").strip()
+        if not username:
+            return APIResponse.error(
+                message="username is required.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        from apps.profiles.models import ClientProfile
+
+        try:
+            client_profile = ClientProfile.objects.select_related("user").get(
+                username=username,
+                deleted_at__isnull=True,
+            )
+        except ClientProfile.DoesNotExist:
+            return APIResponse.error(
+                message="No client found with that username.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        if client_profile.user.role != "client":
+            return APIResponse.error(
+                message="That account is not a client account.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        if request.user.role == "trainer":
+            try:
+                trainer_profile = request.user.trainer_profile
+            except Exception:
+                return APIResponse.error(
+                    message="Trainer profile not found.",
+                    code=ErrorCode.NOT_FOUND,
+                    status_code=404,
+                )
+            gym_profile = None
+            duplicate = ClientMembership.objects.filter(
+                client=client_profile,
+                trainer=trainer_profile,
+                deleted_at__isnull=True,
+            ).exists()
+        else:
+            try:
+                gym_profile = request.user.gym_profile
+            except Exception:
+                return APIResponse.error(
+                    message="Gym profile not found.",
+                    code=ErrorCode.NOT_FOUND,
+                    status_code=404,
+                )
+            trainer_profile = None
+            duplicate = ClientMembership.objects.filter(
+                client=client_profile,
+                gym=gym_profile,
+                deleted_at__isnull=True,
+            ).exists()
+
+        if duplicate:
+            return APIResponse.error(
+                message="This client is already in your community.",
+                code=ErrorCode.ALREADY_EXISTS,
+                status_code=400,
+            )
+
+        with transaction.atomic():
+            membership = ClientMembership.objects.create(
+                client=client_profile,
+                trainer=trainer_profile,
+                gym=gym_profile,
+                status=ClientMembership.Status.ACTIVE,
+            )
+
+        serializer = ClientMembershipSerializer(membership)
+        return APIResponse.created(
+            data=serializer.data,
+            message="Client added to your community.",
         )
