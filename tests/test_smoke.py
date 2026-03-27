@@ -110,23 +110,26 @@ def test_custom_token_serializer_importable():
 
 
 # ---------------------------------------------------------------------------
-# 8. Chat middleware stub wraps inner app
+# 8. Chat JWT middleware wraps inner app (Phase 2: full implementation)
 # ---------------------------------------------------------------------------
 def test_jwt_auth_middleware_stub():
-    from apps.chat.middleware import JwtAuthMiddlewareStack
+    from apps.chat.middleware import JWTAuthMiddleware, JwtAuthMiddlewareStack
 
     sentinel = object()
-    assert JwtAuthMiddlewareStack(sentinel) is sentinel
+    wrapped = JwtAuthMiddlewareStack(sentinel)
+    # Phase 2: JwtAuthMiddlewareStack now returns a JWTAuthMiddleware instance
+    assert isinstance(wrapped, JWTAuthMiddleware)
+    assert wrapped.app is sentinel
 
 
 # ---------------------------------------------------------------------------
-# 9. Chat routing urlpatterns is an empty list
+# 9. Chat routing urlpatterns has WebSocket routes (Phase 2: full routing)
 # ---------------------------------------------------------------------------
 def test_chat_routing_urlpatterns():
     from apps.chat.routing import websocket_urlpatterns
 
     assert isinstance(websocket_urlpatterns, list)
-    assert len(websocket_urlpatterns) == 0
+    assert len(websocket_urlpatterns) == 2
 
 
 # ---------------------------------------------------------------------------

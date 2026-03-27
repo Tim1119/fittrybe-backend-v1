@@ -187,6 +187,18 @@ class Command(BaseCommand):
         except PlanConfig.DoesNotExist:
             pass
 
+        from apps.chat.models import Chatroom, ChatroomMember
+
+        chatroom, _ = Chatroom.objects.get_or_create(
+            gym=profile,
+            defaults={"name": f"{gym_name}'s Community"},
+        )
+        ChatroomMember.objects.get_or_create(
+            chatroom=chatroom,
+            user=user,
+            defaults={"role": "admin", "is_active": True},
+        )
+
         self.stdout.write(f"  ✓ Gym: {gym_name} ({email})")
         return profile
 
@@ -275,6 +287,19 @@ class Command(BaseCommand):
                 defaults={"role": "trainer"},
             )
 
+        if gym is None:
+            from apps.chat.models import Chatroom, ChatroomMember
+
+            chatroom, _ = Chatroom.objects.get_or_create(
+                trainer=profile,
+                defaults={"name": f"{full_name}'s Community"},
+            )
+            ChatroomMember.objects.get_or_create(
+                chatroom=chatroom,
+                user=user,
+                defaults={"role": "admin", "is_active": True},
+            )
+
         self.stdout.write(f"  ✓ Trainer: {full_name} ({trainer_type}) ({email})")
         return profile
 
@@ -304,6 +329,7 @@ class Command(BaseCommand):
         return profile
 
     def create_membership(self, client_profile, trainer=None, gym=None):
+        from apps.chat.models import Chatroom, ChatroomMember
         from apps.clients.models import ClientMembership
 
         kwargs = {
@@ -320,6 +346,18 @@ class Command(BaseCommand):
             kwargs["gym"] = gym
 
         ClientMembership.objects.create(**kwargs)
+
+        # Add client to chatroom (signals may not fire reliably in mgmt cmds)
+        if trainer:
+            room = Chatroom.objects.filter(trainer=trainer).first()
+        else:
+            room = Chatroom.objects.filter(gym=gym).first()
+        if room:
+            ChatroomMember.objects.get_or_create(
+                chatroom=room,
+                user=client_profile.user,
+                defaults={"role": "member", "is_active": True},
+            )
 
     def clear_seed_data(self):
         from apps.accounts.models import User
