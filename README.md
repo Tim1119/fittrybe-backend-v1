@@ -280,19 +280,79 @@ After starting the server, visit:
 
 ---
 
-## WebSocket Endpoints
+## Chat — REST vs WebSocket
 
-For real-time chat (requires a JWT access token):
+The chat feature uses **both** REST and WebSocket. They serve different purposes.
+
+| Protocol | Use for | Speed |
+|----------|---------|-------|
+| REST (HTTP) | Loading existing data — message history, member list, pinned messages, unread count | Fast — one-time query |
+| WebSocket (WSS) | Real-time events — new messages, typing indicators, deletions | Instant — server pushes |
+
+### The flow Flutter/React should follow
+
+```
+1. User opens chatroom
+   → REST: GET /api/v1/chat/rooms/{id}/messages/   ← load last 50 messages
+   → WSS:  connect to ws://localhost:8000/ws/chat/room/{id}/?token=JWT
+
+2. New message arrives
+   → WebSocket pushes message.new event automatically
+   → NO REST call needed
+
+3. User sends a message
+   → WebSocket: send {type: "message.send", content: "..."}
+   → Backend saves to DB and broadcasts to all connected members instantly
+
+4. User uploads an image
+   → REST: POST /api/v1/chat/rooms/{id}/upload/ ← get back a URL
+   → WebSocket: send {type: "message.send", message_type: "image", attachment_url: "..."}
+
+5. User leaves chatroom
+   → REST: POST /api/v1/chat/rooms/{id}/read/ ← mark as read
+   → WebSocket disconnects automatically
+```
+
+### WebSocket Connection URLs
 
 ```
 # Community chatroom
-ws://localhost:8000/ws/chat/room/{chatroom_id}/?token=<JWT_ACCESS_TOKEN>
+ws://localhost:8000/ws/chat/room/{chatroom_id}/?token=JWT_ACCESS_TOKEN
 
 # Direct messages
-ws://localhost:8000/ws/chat/dm/{other_user_id}/?token=<JWT_ACCESS_TOKEN>
+ws://localhost:8000/ws/chat/dm/{other_user_id}/?token=JWT_ACCESS_TOKEN
 ```
 
-Get the JWT token from `POST /api/v1/auth/login/` response.
+> Use `ws://` locally and `wss://` in production.
+> Get the JWT token from `POST /api/v1/auth/login/` → `data.access`
+
+### WebSocket Close Codes
+
+| Code | Meaning |
+|------|---------|
+| `4001` | No token or invalid token — re-authenticate |
+| `4003` | Not a member of this chatroom |
+
+### WebSocket Events You Send
+
+| Event | Payload |
+|-------|---------|
+| `message.send` | `{message_type, content, attachment_url, reply_to_id, audience, target_user_id}` |
+| `message.delete` | `{message_id}` |
+| `message.read` | `{}` |
+| `typing.start` | `{}` |
+| `typing.stop` | `{}` |
+
+### WebSocket Events You Receive
+
+| Event | Meaning |
+|-------|---------|
+| `message.new` | New message — append to chat |
+| `message.deleted` | Message deleted — remove from chat |
+| `typing.indicator` | Someone is typing |
+| `error` | Something went wrong (check `code` field) |
+
+📖 **Full chat API reference (REST + WebSocket):** https://www.notion.so/330cdf3cc8bc818db3e9e357a96be4b8
 
 ---
 
