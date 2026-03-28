@@ -37,6 +37,8 @@ class Notification(BaseModel):
         PAYMENT_REMINDER = "payment_reminder", "Payment Reminder"
         SUBSCRIPTION_LOCKED = "subscription_locked", "Subscription Locked"
         NEW_REVIEW = "new_review", "New Review"
+        MARKETPLACE_ENQUIRY = "marketplace_enquiry", "Marketplace Enquiry"
+        ENQUIRY_RESPONSE = "enquiry_response", "Enquiry Response"
 
     recipient = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="notifications"
