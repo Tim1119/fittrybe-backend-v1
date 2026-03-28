@@ -9,7 +9,7 @@ from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -63,6 +63,7 @@ class ProductListCreateView(APIView):
     """
 
     permission_classes = []
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     @extend_schema(
         summary="List active product listings",
@@ -138,9 +139,11 @@ class ProductListCreateView(APIView):
     @extend_schema(
         summary="Create a product listing",
         description=(
-            "Creates a new product listing. Caller must be a trainer or gym. "
-            "The product is created with status=draft. "
-            "Requires authentication."
+            "Creates a new product listing (status=draft). "
+            "Accepts application/json or multipart/form-data. "
+            "When sending multipart, include image files under the 'images' key "
+            "(max 5 files, JPEG/PNG, 5 MB each). "
+            "Requires authentication as trainer or gym."
         ),
         request=ProductCreateUpdateSerializer,
         responses={
@@ -163,7 +166,26 @@ class ProductListCreateView(APIView):
                 status_code=403,
             )
 
-        serializer = ProductCreateUpdateSerializer(data=request.data)
+        # ── image files (multipart) ──────────────────────────────────────────
+        new_files = request.FILES.getlist("images")
+        if len(new_files) > MAX_IMAGES:
+            return APIResponse.error(
+                message=f"Maximum {MAX_IMAGES} images allowed.",
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+        for f in new_files:
+            err = _validate_image_file(f)
+            if err:
+                return APIResponse.error(message=err, code=ErrorCode.VALIDATION_ERROR)
+
+        # DRF 3.17+ merges FILES into request.data; strip the 'images' key when
+        # files are uploaded so the JSONField serializer doesn't reject file objects.
+        serializer_data = (
+            {k: v for k, v in request.data.items() if k != "images"}
+            if new_files
+            else request.data
+        )
+        serializer = ProductCreateUpdateSerializer(data=serializer_data)
         if not serializer.is_valid():
             return APIResponse.error(
                 message="Validation error.",
@@ -171,8 +193,19 @@ class ProductListCreateView(APIView):
                 code=ErrorCode.VALIDATION_ERROR,
             )
 
+        image_urls = [_save_image_file(f) for f in new_files]
+        # If no files were sent, fall back to the images list from JSON body
+        # (serializer already validated it, e.g. max-5 rule)
+        if not image_urls:
+            image_urls = serializer.validated_data.get("images", [])
+
         trainer, gym = _get_owner_profile(request.user)
-        product = serializer.save(trainer=trainer, gym=gym, status=Product.Status.DRAFT)
+        product = serializer.save(
+            trainer=trainer,
+            gym=gym,
+            status=Product.Status.DRAFT,
+            images=image_urls,
+        )
         return APIResponse.created(
             data=ProductSerializer(product).data,
             message="Product listing created.",
@@ -188,6 +221,7 @@ class ProductDetailView(APIView):
     """
 
     permission_classes = []
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def _get_product(self, pk):
         try:
@@ -225,10 +259,17 @@ class ProductDetailView(APIView):
 
     @extend_schema(
         summary="Update a product listing",
-        description="Partial update allowed. Only the product owner may update.",
+        description=(
+            "Partial update. Accepts application/json or multipart/form-data. "
+            "When sending multipart, pass existing image URLs to keep as "
+            "'existing_images' (repeat the field for multiple values) and new "
+            "files under 'images'. Combined total must not exceed 5. "
+            "Only the product owner may update."
+        ),
         request=ProductCreateUpdateSerializer,
         responses={
             200: OpenApiResponse(description="Updated product"),
+            400: OpenApiResponse(description="Validation error"),
             403: OpenApiResponse(description="Not the owner"),
             404: OpenApiResponse(description="Not found"),
         },
@@ -254,8 +295,39 @@ class ProductDetailView(APIView):
                 status_code=403,
             )
 
+        # ── image files (multipart) ──────────────────────────────────────────
+        new_files = request.FILES.getlist("images")
+        if new_files:
+            existing = request.data.getlist("existing_images")
+            if len(existing) + len(new_files) > MAX_IMAGES:
+                return APIResponse.error(
+                    message=f"Maximum {MAX_IMAGES} images allowed.",
+                    code=ErrorCode.VALIDATION_ERROR,
+                )
+            for f in new_files:
+                err = _validate_image_file(f)
+                if err:
+                    return APIResponse.error(
+                        message=err, code=ErrorCode.VALIDATION_ERROR
+                    )
+            new_urls = [_save_image_file(f) for f in new_files]
+            computed_images = existing + new_urls
+        else:
+            computed_images = None  # handled by serializer (JSON path)
+
+        # DRF 3.17+ merges FILES into request.data; strip 'images' and
+        # 'existing_images' (not a model field) when files are present.
+        serializer_data = (
+            {
+                k: v
+                for k, v in request.data.items()
+                if k not in ("images", "existing_images")
+            }
+            if new_files
+            else request.data
+        )
         serializer = ProductCreateUpdateSerializer(
-            product, data=request.data, partial=True
+            product, data=serializer_data, partial=True
         )
         if not serializer.is_valid():
             return APIResponse.error(
@@ -263,7 +335,12 @@ class ProductDetailView(APIView):
                 errors=serializer.errors,
                 code=ErrorCode.VALIDATION_ERROR,
             )
-        product = serializer.save()
+
+        save_kwargs = {}
+        if computed_images is not None:
+            save_kwargs["images"] = computed_images
+
+        product = serializer.save(**save_kwargs)
         return APIResponse.success(
             data=ProductSerializer(product).data,
             message="Product updated.",
@@ -337,12 +414,38 @@ class MyProductsView(APIView):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Image endpoints
+# Image helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
 MAX_IMAGES = 5
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
 ALLOWED_CONTENT_TYPES = ("image/jpeg", "image/png")
+
+
+def _validate_image_file(f):
+    """Return an error message string if the file is invalid, else None."""
+    if f.content_type not in ALLOWED_CONTENT_TYPES:
+        return "Only JPEG and PNG images are allowed."
+    if f.size > MAX_IMAGE_SIZE_BYTES:
+        return f"Image '{f.name}' must be smaller than 5 MB."
+    return None
+
+
+def _save_image_file(image_file):
+    """Persist image_file to MEDIA_ROOT and return its public URL."""
+    from django.conf import settings
+
+    ext = "jpg" if image_file.content_type == "image/jpeg" else "png"
+    filename = f"{uuid.uuid4()}.{ext}"
+    rel_path = os.path.join("marketplace", "products", filename)
+    abs_path = os.path.join(settings.MEDIA_ROOT, rel_path)
+
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    with open(abs_path, "wb") as fh:
+        for chunk in image_file.chunks():
+            fh.write(chunk)
+
+    return f"{settings.MEDIA_URL}{rel_path}"
 
 
 @extend_schema(tags=["Marketplace"])
@@ -395,17 +498,9 @@ class ProductImageUploadView(APIView):
                 code=ErrorCode.VALIDATION_ERROR,
             )
 
-        if image_file.content_type not in ALLOWED_CONTENT_TYPES:
-            return APIResponse.error(
-                message="Only JPEG and PNG images are allowed.",
-                code=ErrorCode.VALIDATION_ERROR,
-            )
-
-        if image_file.size > MAX_IMAGE_SIZE_BYTES:
-            return APIResponse.error(
-                message="Image must be smaller than 5 MB.",
-                code=ErrorCode.VALIDATION_ERROR,
-            )
+        err = _validate_image_file(image_file)
+        if err:
+            return APIResponse.error(message=err, code=ErrorCode.VALIDATION_ERROR)
 
         if len(product.images) >= MAX_IMAGES:
             return APIResponse.error(
@@ -413,19 +508,7 @@ class ProductImageUploadView(APIView):
                 code=ErrorCode.VALIDATION_ERROR,
             )
 
-        from django.conf import settings
-
-        ext = "jpg" if image_file.content_type == "image/jpeg" else "png"
-        filename = f"{uuid.uuid4()}.{ext}"
-        rel_path = os.path.join("marketplace", "products", filename)
-        abs_path = os.path.join(settings.MEDIA_ROOT, rel_path)
-
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-        with open(abs_path, "wb") as f:
-            for chunk in image_file.chunks():
-                f.write(chunk)
-
-        url = f"{settings.MEDIA_URL}{rel_path}"
+        url = _save_image_file(image_file)
         product.images = list(product.images) + [url]
         product.save(update_fields=["images"])
 

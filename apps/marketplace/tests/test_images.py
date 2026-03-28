@@ -10,6 +10,12 @@ from PIL import Image
 
 from apps.marketplace.tests.conftest import make_product
 
+LIST_URL = "/api/v1/marketplace/products/"
+
+
+def detail_url(pk):
+    return f"/api/v1/marketplace/products/{pk}/"
+
 
 def images_url(pk):
     return f"/api/v1/marketplace/products/{pk}/images/"
@@ -156,5 +162,151 @@ def test_delete_nonexistent_url_returns_400(trainer_setup):
         {"url": "http://example.com/nothere.jpg"},
         format="json",
     )
+
+    assert res.status_code == 400
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Combined create + images (POST /products/ multipart)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_create_product_with_images_multipart(trainer_setup, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    _, profile, api_client = trainer_setup
+
+    img1 = make_image_file(fmt="JPEG", name="a.jpg")
+    img2 = make_image_file(fmt="PNG", name="b.png")
+    payload = {
+        "name": "Program With Photos",
+        "description": "Comes with photos",
+        "category": "program",
+        "price": "3000.00",
+        "images": [img1, img2],
+    }
+    res = api_client.post(LIST_URL, payload, format="multipart")
+
+    assert res.status_code == 201
+    assert len(res.data["data"]["images"]) == 2
+
+
+@pytest.mark.django_db
+def test_create_product_too_many_images_rejected(trainer_setup, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    _, profile, api_client = trainer_setup
+
+    files = [make_image_file(fmt="JPEG", name=f"img{i}.jpg") for i in range(6)]
+    payload = {
+        "name": "Too Many Photos",
+        "description": "desc",
+        "category": "program",
+        "price": "1000.00",
+        "images": files,
+    }
+    res = api_client.post(LIST_URL, payload, format="multipart")
+
+    assert res.status_code == 400
+
+
+@pytest.mark.django_db
+def test_create_product_invalid_image_type_rejected(trainer_setup):
+    _, profile, api_client = trainer_setup
+
+    bad = SimpleUploadedFile("doc.pdf", b"PDF content", content_type="application/pdf")
+    payload = {
+        "name": "Bad Image",
+        "description": "desc",
+        "category": "program",
+        "price": "1000.00",
+        "images": bad,
+    }
+    res = api_client.post(LIST_URL, payload, format="multipart")
+
+    assert res.status_code == 400
+
+
+@pytest.mark.django_db
+def test_create_product_oversized_image_rejected(trainer_setup):
+    _, profile, api_client = trainer_setup
+
+    big = make_large_image_file()
+    payload = {
+        "name": "Big Image",
+        "description": "desc",
+        "category": "program",
+        "price": "1000.00",
+        "images": big,
+    }
+    res = api_client.post(LIST_URL, payload, format="multipart")
+
+    assert res.status_code == 400
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Combined update + images (PUT /products/{id}/ multipart)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_update_product_adds_new_images(trainer_setup, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    _, profile, api_client = trainer_setup
+    product = make_product(trainer=profile, images=["http://example.com/existing.jpg"])
+
+    img = make_image_file(fmt="JPEG", name="new.jpg")
+    payload = {
+        "existing_images": "http://example.com/existing.jpg",
+        "images": img,
+    }
+    res = api_client.put(detail_url(product.pk), payload, format="multipart")
+
+    assert res.status_code == 200
+    assert len(res.data["data"]["images"]) == 2
+    assert "http://example.com/existing.jpg" in res.data["data"]["images"]
+
+
+@pytest.mark.django_db
+def test_update_product_drops_existing_image_when_not_passed(
+    trainer_setup, settings, tmp_path
+):
+    settings.MEDIA_ROOT = str(tmp_path)
+    _, profile, api_client = trainer_setup
+    product = make_product(
+        trainer=profile,
+        images=["http://example.com/old1.jpg", "http://example.com/old2.jpg"],
+    )
+
+    img = make_image_file(fmt="JPEG", name="new.jpg")
+    # Keep only old1, drop old2, add new file
+    payload = {
+        "existing_images": "http://example.com/old1.jpg",
+        "images": img,
+    }
+    res = api_client.put(detail_url(product.pk), payload, format="multipart")
+
+    assert res.status_code == 200
+    images = res.data["data"]["images"]
+    assert "http://example.com/old1.jpg" in images
+    assert "http://example.com/old2.jpg" not in images
+    assert len(images) == 2  # old1 + new file
+
+
+@pytest.mark.django_db
+def test_update_product_exceeds_max_images_rejected(trainer_setup, settings, tmp_path):
+    settings.MEDIA_ROOT = str(tmp_path)
+    _, profile, api_client = trainer_setup
+    product = make_product(
+        trainer=profile,
+        images=["u1", "u2", "u3", "u4"],
+    )
+
+    img1 = make_image_file(fmt="JPEG", name="n1.jpg")
+    img2 = make_image_file(fmt="JPEG", name="n2.jpg")
+    payload = {
+        "existing_images": ["u1", "u2", "u3", "u4"],
+        "images": [img1, img2],  # 4 existing + 2 new = 6 → reject
+    }
+    res = api_client.put(detail_url(product.pk), payload, format="multipart")
 
     assert res.status_code == 400
