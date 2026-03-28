@@ -44,3 +44,8 @@ node_modules/
 
 # Docker volumes
 postgres_data/
+
+
+firebase-service-account.json
+test-fcm.html
+firebase-config
