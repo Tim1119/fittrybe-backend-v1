@@ -112,6 +112,8 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
                 {"type": "broadcast_message", "message": serialized},
             )
 
+        await self._notify_offline_members(message)
+
     async def handle_message_delete(self, data):
         message_id = data.get("message_id")
         if not message_id:
@@ -289,6 +291,45 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
             "sent_at": message.sent_at.isoformat(),
         }
 
+    @database_sync_to_async
+    def _notify_offline_members(self, message):
+        from apps.chat.models import ChatroomMember
+        from apps.notifications.models import Notification
+        from apps.notifications.tasks import send_push_notification
+
+        members = (
+            ChatroomMember.objects.filter(
+                chatroom_id=self.chatroom_id,
+                is_active=True,
+            )
+            .exclude(user=self.user)
+            .select_related("user")
+        )
+
+        for member in members:
+            Notification.objects.create(
+                recipient=member.user,
+                sender=self.user,
+                notification_type="chat_message",
+                title=self.user.display_name or "New Message",
+                body=message.content[:100] if message.content else "Sent an image",
+                data={
+                    "type": "chat_message",
+                    "chatroom_id": str(self.chatroom_id),
+                    "message_id": str(message.id),
+                },
+            )
+            send_push_notification.delay(
+                user_id=str(member.user.id),
+                title=self.user.display_name or "New Message",
+                body=message.content[:100] if message.content else "Sent an image",
+                data={
+                    "type": "chat_message",
+                    "chatroom_id": str(self.chatroom_id),
+                    "message_id": str(message.id),
+                },
+            )
+
     async def send_error(self, code, message):
         await self.send(
             text_data=json.dumps({"type": "error", "code": code, "message": message})
@@ -337,6 +378,7 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             self.room_group_name,
             {"type": "broadcast_dm", "message": serialized},
         )
+        await self._notify_dm_recipient(message)
 
     async def handle_dm_read(self):
         await self._mark_read()
@@ -416,3 +458,30 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             "attachment_url": message.attachment_url,
             "sent_at": message.sent_at.isoformat(),
         }
+
+    @database_sync_to_async
+    def _notify_dm_recipient(self, message):
+        from apps.notifications.models import Notification
+        from apps.notifications.tasks import send_push_notification
+
+        recipient = self._other_user
+        Notification.objects.create(
+            recipient=recipient,
+            sender=self.user,
+            notification_type="direct_message",
+            title=self.user.display_name or "New Message",
+            body=message.content[:100] if message.content else "Sent an image",
+            data={
+                "type": "direct_message",
+                "user_id": str(self.user.id),
+            },
+        )
+        send_push_notification.delay(
+            user_id=str(recipient.id),
+            title=self.user.display_name or "New Message",
+            body=message.content[:100] if message.content else "Sent an image",
+            data={
+                "type": "direct_message",
+                "user_id": str(self.user.id),
+            },
+        )

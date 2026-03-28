@@ -3,10 +3,13 @@ Fit Trybe Backend — Base Settings
 Shared across all environments.
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
 import environ
+import firebase_admin
+from firebase_admin import credentials as firebase_credentials
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -353,6 +356,19 @@ ANDROID_SHA256_FINGERPRINT = env("ANDROID_SHA256_FINGERPRINT", default="PLACEHOL
 APP_STORE_URL = env("APP_STORE_URL", default="#")
 PLAY_STORE_URL = env("PLAY_STORE_URL", default="#")
 
+# ---------------------------------------------------------------------------
+# Firebase Cloud Messaging (FCM)
+# ---------------------------------------------------------------------------
+FCM_SERVICE_ACCOUNT_JSON = env("FCM_SERVICE_ACCOUNT_JSON", default=None)
+
+# Initialize Firebase app once at settings load
+if (
+    FCM_SERVICE_ACCOUNT_JSON
+    and os.path.exists(FCM_SERVICE_ACCOUNT_JSON)
+    and not firebase_admin._apps
+):
+    _cred = firebase_credentials.Certificate(FCM_SERVICE_ACCOUNT_JSON)
+    firebase_admin.initialize_app(_cred)
 
 # ---------------------------------------------------------------------------
 # Celery Beat — scheduled tasks
