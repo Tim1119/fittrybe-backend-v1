@@ -60,6 +60,7 @@ LOCAL_APPS = [
     "apps.clients",
     "apps.chat",
     "apps.marketplace",
+    "apps.sessions",
     "apps.badges",
     "apps.subscriptions",
     "apps.trackers",
@@ -395,6 +396,10 @@ CELERY_BEAT_SCHEDULE = {
     "update-membership-statuses": {
         "task": "apps.clients.tasks.update_membership_statuses",
         "schedule": crontab(hour=0, minute=0),
+    },
+    "award-weekly-top-badges": {
+        "task": "apps.badges.tasks.award_weekly_top_badges",
+        "schedule": crontab(hour=6, minute=0, day_of_week="monday"),
     },
 }
 

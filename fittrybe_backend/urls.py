@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/v1/clients/", include("apps.clients.urls")),
     path("api/v1/chat/", include("apps.chat.urls")),
     path("api/v1/marketplace/", include("apps.marketplace.urls")),
+    path("api/v1/sessions/", include("apps.sessions.urls")),
     path("api/v1/badges/", include("apps.badges.urls")),
     path("api/v1/subscriptions/", include("apps.subscriptions.urls")),
     path("api/v1/trackers/", include("apps.trackers.urls")),
