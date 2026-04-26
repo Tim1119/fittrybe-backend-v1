@@ -382,6 +382,7 @@ class ClientProfile(BaseModel):
         populate_from="_get_username_base", unique=True, always_update=False
     )
     profile_photo_url = models.URLField(blank=True)
+    tracker_addon_active = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Client Profile"
