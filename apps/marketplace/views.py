@@ -85,6 +85,12 @@ class ProductListCreateView(APIView):
             OpenApiParameter(
                 "is_featured", str, description="'true' for featured only"
             ),
+            OpenApiParameter(
+                "gym_slug", str, description="Filter products by gym slug"
+            ),
+            OpenApiParameter(
+                "trainer_id", str, description="Filter products by trainer ID"
+            ),
         ],
         responses={
             200: OpenApiResponse(description="Paginated product listings"),
@@ -128,6 +134,14 @@ class ProductListCreateView(APIView):
         is_featured = request.query_params.get("is_featured")
         if is_featured and is_featured.lower() == "true":
             qs = qs.filter(is_featured=True)
+
+        gym_slug = request.query_params.get("gym_slug")
+        if gym_slug:
+            qs = qs.filter(gym__slug=gym_slug)
+
+        trainer_id = request.query_params.get("trainer_id")
+        if trainer_id:
+            qs = qs.filter(trainer__id=trainer_id)
 
         qs = qs.order_by("-is_featured", "-created_at")
 

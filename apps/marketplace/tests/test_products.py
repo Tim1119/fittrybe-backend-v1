@@ -261,3 +261,65 @@ def test_my_products_does_not_return_other_trainers_products(
     names = [p["name"] for p in res.data["data"]]
     assert "Mine" in names
     assert "Theirs" not in names
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Gym slug + trainer ID filters
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_gym_slug_filter_returns_only_that_gyms_products(gym_setup, anon_client):
+    from apps.marketplace.tests.conftest import make_gym
+
+    _, gym_profile, _ = gym_setup
+    gym2_user, gym2_profile = make_gym(email="gym2@mkt.test", name="Other Gym")
+
+    make_product(gym=gym_profile, name="Iron House Product")
+    make_product(gym=gym2_profile, name="Other Gym Product")
+
+    res = anon_client.get(LIST_URL, {"gym_slug": gym_profile.slug})
+    assert res.status_code == 200
+    names = [p["name"] for p in res.data["data"]]
+    assert "Iron House Product" in names
+    assert "Other Gym Product" not in names
+
+
+@pytest.mark.django_db
+def test_trainer_id_filter_returns_only_that_trainers_products(
+    trainer_setup, trainer2_setup, anon_client
+):
+    _, p1, _ = trainer_setup
+    _, p2, _ = trainer2_setup
+    make_product(trainer=p1, name="Trainer1 Item")
+    make_product(trainer=p2, name="Trainer2 Item")
+
+    res = anon_client.get(LIST_URL, {"trainer_id": str(p1.id)})
+    assert res.status_code == 200
+    names = [p["name"] for p in res.data["data"]]
+    assert "Trainer1 Item" in names
+    assert "Trainer2 Item" not in names
+
+
+@pytest.mark.django_db
+def test_gym_slug_and_trainer_id_combined(gym_setup, trainer_setup, anon_client):
+    _, gym_profile, _ = gym_setup
+    _, trainer_profile, _ = trainer_setup
+    make_product(gym=gym_profile, name="Gym Only Product")
+    make_product(trainer=trainer_profile, name="Trainer Only Product")
+
+    res = anon_client.get(
+        LIST_URL,
+        {"gym_slug": gym_profile.slug, "trainer_id": str(trainer_profile.id)},
+    )
+    assert res.status_code == 200
+    names = [p["name"] for p in res.data["data"]]
+    assert "Gym Only Product" not in names
+    assert "Trainer Only Product" not in names
+
+
+@pytest.mark.django_db
+def test_unknown_trainer_id_returns_empty_not_404(anon_client):
+    res = anon_client.get(LIST_URL, {"trainer_id": "99999"})
+    assert res.status_code == 200
+    assert res.data["data"] == []

@@ -506,3 +506,46 @@ class TestCompleteOnboardingView:
         assert resp.status_code == status.HTTP_200_OK
         auth_client._user.refresh_from_db()
         assert auth_client._user.onboarding_status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Resend verification email
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+class TestResendVerificationView:
+    URL = "/api/v1/auth/resend-verification/"
+
+    def test_unverified_email_returns_200_and_fires_task(self, api_client):
+        from unittest.mock import patch
+
+        from apps.accounts.tests.factories import UnverifiedUserFactory
+
+        user = UnverifiedUserFactory(email="unverified@example.com", is_active=True)
+        with patch("apps.accounts.views.send_verification_email_task.delay") as task:
+            resp = api_client.post(
+                self.URL, {"email": "unverified@example.com"}, format="json"
+            )
+            assert resp.status_code == status.HTTP_200_OK
+            task.assert_called_once_with(str(user.id))
+
+    def test_already_verified_email_returns_400(self, api_client):
+        from apps.accounts.tests.factories import UserFactory
+
+        UserFactory(email="verified@example.com")
+        resp = api_client.post(
+            self.URL, {"email": "verified@example.com"}, format="json"
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "already verified" in resp.data["message"].lower()
+
+    def test_unknown_email_returns_200_no_leak(self, api_client):
+        resp = api_client.post(self.URL, {"email": "nobody@example.com"}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_missing_email_returns_400(self, api_client):
+        resp = api_client.post(self.URL, {}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_invalid_email_format_returns_400(self, api_client):
+        resp = api_client.post(self.URL, {"email": "not-an-email"}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST

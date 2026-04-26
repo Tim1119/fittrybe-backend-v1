@@ -514,3 +514,51 @@ class TestPhotoUploadView:
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         )
+
+
+# ---------------------------------------------------------------------------
+# Profile visibility toggle
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+class TestProfileVisibilityView:
+    URL = "/api/v1/profiles/me/visibility/"
+
+    def test_trainer_sets_published_false(self):
+        profile = TrainerProfileFactory(is_published=True)
+        client = _auth_client(profile.user)
+        resp = client.patch(self.URL, {"is_published": False}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        profile.refresh_from_db()
+        assert profile.is_published is False
+
+    def test_trainer_sets_published_true(self):
+        profile = TrainerProfileFactory(is_published=False)
+        client = _auth_client(profile.user)
+        resp = client.patch(self.URL, {"is_published": True}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        profile.refresh_from_db()
+        assert profile.is_published is True
+
+    def test_gym_sets_published_false(self):
+        profile = GymProfileFactory(is_published=True)
+        client = _auth_client(profile.user)
+        resp = client.patch(self.URL, {"is_published": False}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        profile.refresh_from_db()
+        assert profile.is_published is False
+
+    def test_client_returns_403(self):
+        profile = ClientProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.patch(self.URL, {"is_published": False}, format="json")
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_unauthenticated_returns_401(self):
+        resp = APIClient().patch(self.URL, {"is_published": False}, format="json")
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_missing_is_published_returns_400(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.patch(self.URL, {}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST

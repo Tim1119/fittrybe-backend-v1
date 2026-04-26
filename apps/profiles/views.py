@@ -1997,3 +1997,39 @@ class GymTrainerAcceptView(APIView):
         return APIResponse.success(
             message="Account set up successfully. You can now log in."
         )
+
+
+@extend_schema(
+    tags=["Profiles"],
+    summary="Toggle profile visibility",
+    description="Set is_published true or false for the authenticated trainer or gym.",
+    responses={
+        200: OpenApiResponse(description="Visibility updated"),
+        400: OpenApiResponse(description="is_published field missing"),
+        403: OpenApiResponse(description="Not a trainer or gym account"),
+    },
+)
+class ProfileVisibilityView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def patch(self, request):
+        if "is_published" not in request.data:
+            return APIResponse.error(
+                message="is_published field is required.",
+                errors={"is_published": ["This field is required."]},
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+
+        user = request.user
+        if user.role == "trainer":
+            profile = user.trainer_profile
+        else:
+            profile = user.gym_profile
+
+        profile.is_published = request.data["is_published"]
+        profile.save(update_fields=["is_published"])
+
+        return APIResponse.success(
+            data={"is_published": profile.is_published},
+            message="Profile visibility updated.",
+        )

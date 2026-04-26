@@ -808,3 +808,70 @@ class OnboardingCompleteView(APIView):
             },
             message="Onboarding completed.",
         )
+
+
+@extend_schema(
+    tags=["Authentication"],
+    summary="Resend email verification link",
+    description=(
+        "Sends a new verification email to the given address if the account exists "
+        "and has not yet been verified. Always returns 200 for unknown addresses to "
+        "avoid leaking whether an email is registered. "
+        "TODO: add rate limiting before production."
+    ),
+    request=inline_serializer(
+        name="ResendVerificationRequest",
+        fields={"email": drf_serializers.EmailField()},
+    ),
+    responses={
+        200: OpenApiResponse(description="Email sent (or silently skipped)"),
+        400: OpenApiResponse(description="Email already verified"),
+    },
+    auth=[],
+)
+class ResendVerificationView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email", "").strip()
+        if not email:
+            return APIResponse.error(
+                message="email is required.",
+                errors={"email": ["This field is required."]},
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+
+        # Validate email format using DRF's field
+        field = drf_serializers.EmailField()
+        try:
+            email = field.run_validation(email)
+        except drf_serializers.ValidationError:
+            return APIResponse.error(
+                message="Enter a valid email address.",
+                errors={"email": ["Enter a valid email address."]},
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return APIResponse.success(
+                message=(
+                    "If this email exists and is unverified, "
+                    "a new verification link has been sent."
+                )
+            )
+
+        if user.is_email_verified:
+            return APIResponse.error(
+                message="Email is already verified.",
+                code=ErrorCode.VALIDATION_ERROR,
+            )
+
+        send_verification_email_task.delay(str(user.id))
+        return APIResponse.success(
+            message=(
+                "If this email exists and is unverified, "
+                "a new verification link has been sent."
+            )
+        )
