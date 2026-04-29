@@ -43,6 +43,8 @@ from apps.profiles.models import (
     TrainerProfile,
 )
 from apps.profiles.serializers import (
+    AvailabilitySerializer,
+    CertificationSerializer,
     ClientProfileSerializer,
     CoverUploadSerializer,
     GymProfilePublicSerializer,
@@ -52,6 +54,7 @@ from apps.profiles.serializers import (
     ReviewResponseSerializer,
     ReviewSerializer,
     ReviewSubmitSerializer,
+    ServiceSerializer,
     SpecialisationSerializer,
     TrainerProfilePublicSerializer,
     TrainerProfileSerializer,
@@ -557,23 +560,6 @@ No request body needed — just POST to this endpoint.
         if not profile:
             return _profile_not_found()
 
-        if profile.profile_completion_percentage < 60:
-            return APIResponse.error(
-                message=(
-                    "Your profile is not complete enough to publish. "
-                    "Please fill in more details."
-                ),
-                code=ErrorCode.VALIDATION_ERROR,
-                errors={
-                    "missing_fields": profile.get_missing_fields(),
-                    "profile_completion_percentage": (
-                        profile.profile_completion_percentage
-                    ),
-                    "minimum_required": 60,
-                },
-                status_code=400,
-            )
-
         try:
             if not user.subscription.is_access_allowed():
                 return Response(
@@ -655,13 +641,15 @@ class WizardStatusView(APIView):
 
         return APIResponse.success(
             data={
-                "wizard_step": profile.wizard_step,
-                "wizard_completed": profile.wizard_completed,
-                "is_published": profile.is_published,
                 "profile_completion_percentage": profile.profile_completion_percentage,
                 "missing_fields": profile.get_missing_fields(),
+                "needs_specialisation": (
+                    not profile.specialisations.exists()
+                    if user.role == "trainer"
+                    else False
+                ),
             },
-            message="Wizard status retrieved.",
+            message="Profile status retrieved.",
         )
 
 
@@ -1213,6 +1201,545 @@ class SpecialisationListView(APIView):
             data=SpecialisationSerializer(specs, many=True).data,
             message="Specialisations retrieved.",
         )
+
+
+# ---------------------------------------------------------------------------
+# My specialisations (first login step)
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(
+    summary="Attach specialisations to my profile",
+    description="""
+Attach specialisations to the authenticated trainer's profile.
+(Additive — existing specialisations are kept.)
+
+Maximum 10 total specialisations.
+
+- `specialisation_ids` — IDs from `GET /api/v1/profiles/specialisations/`
+- `custom_names` — creates new non-predefined Specialisation rows then attaches them
+
+After the first attachment, if the trainer has not yet completed onboarding,
+`complete_onboarding()` is called automatically.
+    """,
+    request=inline_serializer(
+        name="ProfileSpecialisationRequest",
+        fields={
+            "specialisation_ids": drf_serializers.ListField(
+                child=drf_serializers.IntegerField(), required=False, default=list
+            ),
+            "custom_names": drf_serializers.ListField(
+                child=drf_serializers.CharField(), required=False, default=list
+            ),
+        },
+    ),
+    responses={
+        200: OpenApiResponse(
+            description="Specialisations attached, updated list returned"
+        ),
+        400: OpenApiResponse(description="Exceeds 10-specialisation limit"),
+        403: OpenApiResponse(description="Clients not allowed"),
+    },
+    tags=["Profiles"],
+)
+class ProfileSpecialisationView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def post(self, request):
+        user = request.user
+        if user.role == "trainer":
+            profile = _get_trainer_profile(user)
+            if not profile:
+                return _profile_not_found()
+        else:
+            profile = _get_gym_profile(user)
+            if not profile:
+                return _profile_not_found()
+            return APIResponse.success(
+                data={
+                    "specialisations": [],
+                    "profile_completion_percentage": (
+                        profile.profile_completion_percentage
+                    ),
+                },
+                message="Specialisations updated.",
+            )
+
+        spec_ids = request.data.get("specialisation_ids", []) or []
+        custom_names = request.data.get("custom_names", []) or []
+
+        existing_count = profile.specialisations.count()
+        if existing_count + len(spec_ids) + len(custom_names) > 10:
+            return APIResponse.error(
+                message="You can have at most 10 specialisations.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        with transaction.atomic():
+            if spec_ids:
+                specs = Specialisation.objects.filter(id__in=spec_ids)
+                profile.specialisations.add(*specs)
+
+            for raw_name in custom_names:
+                name = raw_name.strip()
+                if name:
+                    spec, _ = Specialisation.objects.get_or_create(
+                        name=name,
+                        defaults={"is_predefined": False},
+                    )
+                    profile.specialisations.add(spec)
+
+            if user.onboarding_status != user.OnboardingStatus.COMPLETED:
+                user.complete_onboarding()
+
+        return APIResponse.success(
+            data={
+                "specialisations": SpecialisationSerializer(
+                    profile.specialisations.all(), many=True
+                ).data,
+                "profile_completion_percentage": profile.profile_completion_percentage,
+            },
+            message="Specialisations updated.",
+        )
+
+
+@extend_schema(
+    summary="Remove a specialisation from my profile",
+    description=(
+        "Remove the given specialisation from the profile's M2M. "
+        "The Specialisation object itself is not deleted."
+    ),
+    responses={
+        204: OpenApiResponse(description="Removed"),
+        404: OpenApiResponse(description="Specialisation not attached to this profile"),
+    },
+    tags=["Profiles"],
+)
+class ProfileSpecialisationDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def delete(self, request, specialisation_id):
+        user = request.user
+        if user.role != "trainer":
+            return APIResponse.error(
+                message="Specialisation not found on your profile.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+        profile = _get_trainer_profile(user)
+        if not profile:
+            return _profile_not_found()
+
+        try:
+            spec = profile.specialisations.get(id=specialisation_id)
+        except Specialisation.DoesNotExist:
+            return APIResponse.error(
+                message="Specialisation not found on your profile.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        profile.specialisations.remove(spec)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Services sub-resource
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(
+    summary="List or create services for my profile",
+    description="""
+GET — returns all services for the authenticated trainer or gym.
+
+POST — creates a new service.
+**Body:** `name`, `description`, `session_type` (`physical`|`virtual`|`both`),
+`display_order`
+    """,
+    request=ServiceSerializer,
+    responses={
+        200: OpenApiResponse(description="List of services"),
+        201: OpenApiResponse(description="Created service"),
+        403: OpenApiResponse(description="Clients not allowed"),
+    },
+    tags=["Profiles"],
+)
+class ProfileServiceListCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def _resolve_profile(self, user):
+        if user.role == "trainer":
+            return _get_trainer_profile(user), "trainer"
+        return _get_gym_profile(user), "gym"
+
+    def get(self, request):
+        profile, _ = self._resolve_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+        return APIResponse.success(
+            data=ServiceSerializer(profile.services.all(), many=True).data,
+            message="Services retrieved.",
+        )
+
+    def post(self, request):
+        profile, role = self._resolve_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+
+        serializer = ServiceSerializer(data=request.data)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid service data.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        kwargs = dict(serializer.validated_data)
+        if role == "trainer":
+            svc = Service.objects.create(trainer=profile, **kwargs)
+        else:
+            svc = Service.objects.create(gym=profile, **kwargs)
+
+        return APIResponse.created(
+            data=ServiceSerializer(svc).data,
+            message="Service created.",
+        )
+
+
+@extend_schema(
+    summary="Update or delete a service",
+    description=(
+        "PUT — full update of a service. "
+        "DELETE — removes the service. "
+        "Returns 404 if not found or not owned by this profile."
+    ),
+    request=ServiceSerializer,
+    responses={
+        200: OpenApiResponse(description="Updated service"),
+        204: OpenApiResponse(description="Deleted"),
+        404: OpenApiResponse(description="Not found or not owned"),
+    },
+    tags=["Profiles"],
+)
+class ProfileServiceDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def _get_service(self, user, service_id):
+        if user.role == "trainer":
+            profile = _get_trainer_profile(user)
+            if not profile:
+                return None
+            return Service.objects.filter(trainer=profile, pk=service_id).first()
+        else:
+            profile = _get_gym_profile(user)
+            if not profile:
+                return None
+            return Service.objects.filter(gym=profile, pk=service_id).first()
+
+    def put(self, request, service_id):
+        svc = self._get_service(request.user, service_id)
+        if not svc:
+            return APIResponse.error(
+                message="Service not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+        serializer = ServiceSerializer(svc, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid service data.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+        serializer.save()
+        return APIResponse.success(data=serializer.data, message="Service updated.")
+
+    def delete(self, request, service_id):
+        svc = self._get_service(request.user, service_id)
+        if not svc:
+            return APIResponse.error(
+                message="Service not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+        svc.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Certifications sub-resource
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(
+    summary="List or create certifications for my profile",
+    description="""
+GET — returns all certifications for the authenticated trainer (empty list for gym).
+
+POST — creates a new certification. Returns 403 for gym accounts.
+**Body:** `name`, `issuing_body`, `year_obtained`
+    """,
+    request=CertificationSerializer,
+    responses={
+        200: OpenApiResponse(description="List of certifications"),
+        201: OpenApiResponse(description="Created certification"),
+        403: OpenApiResponse(description="Gyms cannot have certifications"),
+    },
+    tags=["Profiles"],
+)
+class ProfileCertificationListCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def get(self, request):
+        user = request.user
+        if user.role != "trainer":
+            return APIResponse.success(data=[], message="Certifications retrieved.")
+        profile = _get_trainer_profile(user)
+        if not profile:
+            return _profile_not_found()
+        return APIResponse.success(
+            data=CertificationSerializer(profile.certifications.all(), many=True).data,
+            message="Certifications retrieved.",
+        )
+
+    def post(self, request):
+        user = request.user
+        if user.role != "trainer":
+            return APIResponse.error(
+                message="Gym accounts do not have certifications.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+        profile = _get_trainer_profile(user)
+        if not profile:
+            return _profile_not_found()
+
+        serializer = CertificationSerializer(data=request.data)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid certification data.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+        cert = Certification.objects.create(
+            trainer=profile, **dict(serializer.validated_data)
+        )
+        return APIResponse.created(
+            data=CertificationSerializer(cert).data,
+            message="Certification created.",
+        )
+
+
+@extend_schema(
+    summary="Update or delete a certification",
+    responses={
+        200: OpenApiResponse(description="Updated certification"),
+        204: OpenApiResponse(description="Deleted"),
+        404: OpenApiResponse(description="Not found or not owned"),
+    },
+    tags=["Profiles"],
+)
+class ProfileCertificationDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _get_cert(self, user, cert_id):
+        if user.role != "trainer":
+            return None
+        profile = _get_trainer_profile(user)
+        if not profile:
+            return None
+        return Certification.objects.filter(trainer=profile, pk=cert_id).first()
+
+    def put(self, request, cert_id):
+        cert = self._get_cert(request.user, cert_id)
+        if not cert:
+            return APIResponse.error(
+                message="Certification not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+        serializer = CertificationSerializer(cert, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid certification data.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+        serializer.save()
+        return APIResponse.success(
+            data=serializer.data, message="Certification updated."
+        )
+
+    def delete(self, request, cert_id):
+        cert = self._get_cert(request.user, cert_id)
+        if not cert:
+            return APIResponse.error(
+                message="Certification not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+        cert.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Availability sub-resource
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(
+    summary="List or create availability slots for my profile",
+    description="""
+GET — returns all availability records for the authenticated trainer or gym.
+
+POST — creates a new availability slot.
+Returns 400 if the day already exists for this profile.
+**Body:** `day_of_week`, `start_time`, `end_time`, `session_type`, `duration_minutes`,
+`virtual_platform`, `notes`
+    """,
+    request=AvailabilitySerializer,
+    responses={
+        200: OpenApiResponse(description="List of availability slots"),
+        201: OpenApiResponse(description="Created availability slot"),
+        400: OpenApiResponse(description="Duplicate day or invalid time range"),
+        403: OpenApiResponse(description="Clients not allowed"),
+    },
+    tags=["Profiles"],
+)
+class ProfileAvailabilityListCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def _resolve_profile(self, user):
+        if user.role == "trainer":
+            return _get_trainer_profile(user), "trainer"
+        return _get_gym_profile(user), "gym"
+
+    def get(self, request):
+        profile, _ = self._resolve_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+        return APIResponse.success(
+            data=AvailabilitySerializer(profile.availability.all(), many=True).data,
+            message="Availability retrieved.",
+        )
+
+    def post(self, request):
+        from django.db import IntegrityError
+
+        profile, role = self._resolve_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+
+        serializer = AvailabilitySerializer(data=request.data)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid availability data.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        vd = serializer.validated_data
+        kwargs = dict(
+            day_of_week=vd["day_of_week"],
+            start_time=vd["start_time"],
+            end_time=vd["end_time"],
+            session_type=vd.get("session_type", Availability.SessionType.BOTH),
+            duration_minutes=vd.get("duration_minutes", 60),
+            virtual_platform=vd.get("virtual_platform", ""),
+            notes=vd.get("notes", ""),
+        )
+
+        try:
+            if role == "trainer":
+                av = Availability.objects.create(trainer=profile, **kwargs)
+            else:
+                av = Availability.objects.create(gym=profile, **kwargs)
+        except IntegrityError:
+            return APIResponse.error(
+                message="A slot for this day already exists.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        return APIResponse.created(
+            data=AvailabilitySerializer(av).data,
+            message="Availability created.",
+        )
+
+
+@extend_schema(
+    summary="Update or delete an availability slot",
+    responses={
+        200: OpenApiResponse(description="Updated availability slot"),
+        204: OpenApiResponse(description="Deleted"),
+        404: OpenApiResponse(description="Not found or not owned"),
+    },
+    tags=["Profiles"],
+)
+class ProfileAvailabilityDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def _get_slot(self, user, availability_id):
+        if user.role == "trainer":
+            profile = _get_trainer_profile(user)
+            if not profile:
+                return None
+            return Availability.objects.filter(
+                trainer=profile, pk=availability_id
+            ).first()
+        else:
+            profile = _get_gym_profile(user)
+            if not profile:
+                return None
+            return Availability.objects.filter(gym=profile, pk=availability_id).first()
+
+    def put(self, request, availability_id):
+        from django.db import IntegrityError
+
+        av = self._get_slot(request.user, availability_id)
+        if not av:
+            return APIResponse.error(
+                message="Availability slot not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+        serializer = AvailabilitySerializer(av, data=request.data, partial=False)
+        if not serializer.is_valid():
+            return APIResponse.error(
+                message="Invalid availability data.",
+                errors=serializer.errors,
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+        try:
+            serializer.save()
+        except IntegrityError:
+            return APIResponse.error(
+                message="A slot for this day already exists.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+        return APIResponse.success(
+            data=serializer.data, message="Availability updated."
+        )
+
+    def delete(self, request, availability_id):
+        av = self._get_slot(request.user, availability_id)
+        if not av:
+            return APIResponse.error(
+                message="Availability slot not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+        av.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 _DEFAULT_OG_IMAGE = "https://fittrybe.com/static/profiles/img/og-default.png"

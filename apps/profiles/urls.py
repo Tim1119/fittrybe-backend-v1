@@ -8,8 +8,16 @@ from apps.profiles.views import (
     GymTrainerCreateListView,
     GymTrainerDetailView,
     MyProfileView,
+    ProfileAvailabilityDetailView,
+    ProfileAvailabilityListCreateView,
+    ProfileCertificationDetailView,
+    ProfileCertificationListCreateView,
     ProfilePhotoUploadView,
     ProfileSearchView,
+    ProfileServiceDetailView,
+    ProfileServiceListCreateView,
+    ProfileSpecialisationDetailView,
+    ProfileSpecialisationView,
     ProfileVisibilityView,
     PublicGymProfileView,
     PublicTrainerProfileView,
@@ -33,6 +41,50 @@ urlpatterns = [
     path("wizard/status/", WizardStatusView.as_view(), name="wizard-status"),
     path("me/", MyProfileView.as_view(), name="my-profile"),
     path("me/visibility/", ProfileVisibilityView.as_view(), name="profile-visibility"),
+    # Specialisations
+    path(
+        "me/specialisations/",
+        ProfileSpecialisationView.as_view(),
+        name="my-specialisations",
+    ),
+    path(
+        "me/specialisations/<int:specialisation_id>/",
+        ProfileSpecialisationDetailView.as_view(),
+        name="my-specialisation-detail",
+    ),
+    # Services
+    path(
+        "me/services/",
+        ProfileServiceListCreateView.as_view(),
+        name="my-services",
+    ),
+    path(
+        "me/services/<int:service_id>/",
+        ProfileServiceDetailView.as_view(),
+        name="my-service-detail",
+    ),
+    # Certifications
+    path(
+        "me/certifications/",
+        ProfileCertificationListCreateView.as_view(),
+        name="my-certifications",
+    ),
+    path(
+        "me/certifications/<int:cert_id>/",
+        ProfileCertificationDetailView.as_view(),
+        name="my-certification-detail",
+    ),
+    # Availability
+    path(
+        "me/availability/",
+        ProfileAvailabilityListCreateView.as_view(),
+        name="my-availability",
+    ),
+    path(
+        "me/availability/<int:availability_id>/",
+        ProfileAvailabilityDetailView.as_view(),
+        name="my-availability-detail",
+    ),
     path("photo/", ProfilePhotoUploadView.as_view(), name="photo-upload"),
     path("cover/", CoverPhotoUploadView.as_view(), name="cover-upload"),
     path("specialisations/", SpecialisationListView.as_view(), name="specialisations"),

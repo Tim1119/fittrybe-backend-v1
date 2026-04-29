@@ -264,19 +264,17 @@ class TestLoginView:
         assert resp.status_code == status.HTTP_200_OK
         onboarding = resp.data["data"]["onboarding"]
         assert "status" in onboarding
-        assert "is_completed" in onboarding
+        assert "needs_specialisation" in onboarding
         assert "is_first_login" in onboarding
-        assert "wizard_step" in onboarding
         assert "profile_completion_percentage" in onboarding
 
-    def test_login_onboarding_wizard_step_defaults_to_zero(self, api_client):
+    def test_login_onboarding_profile_completion_defaults_to_zero(self, api_client):
         user = UserFactory()
         resp = api_client.post(
             self.URL,
             {"email": user.email, "password": "StrongPass123!"},
             format="json",
         )
-        assert resp.data["data"]["onboarding"]["wizard_step"] == 0
         assert resp.data["data"]["onboarding"]["profile_completion_percentage"] == 0
 
     def test_is_first_login_set_to_false_after_first_login(self, api_client):
@@ -472,9 +470,8 @@ class TestMeView:
         assert resp.status_code == status.HTTP_200_OK
         onboarding = resp.data["data"]["onboarding"]
         assert "status" in onboarding
-        assert "is_completed" in onboarding
+        assert "needs_specialisation" in onboarding
         assert "is_first_login" in onboarding
-        assert "wizard_step" in onboarding
         assert "profile_completion_percentage" in onboarding
 
     def test_unauthenticated_returns_401(self, api_client):
@@ -549,3 +546,74 @@ class TestResendVerificationView:
     def test_invalid_email_format_returns_400(self, api_client):
         resp = api_client.post(self.URL, {"email": "not-an-email"}, format="json")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# ---------------------------------------------------------------------------
+# Login onboarding response — needs_specialisation
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+class TestLoginOnboardingResponse:
+    URL = "/api/v1/auth/login/"
+
+    def test_trainer_with_no_specialisations_needs_specialisation_true(
+        self, api_client
+    ):
+        from apps.profiles.tests.factories import TrainerProfileFactory
+
+        profile = TrainerProfileFactory()
+        resp = api_client.post(
+            self.URL,
+            {"email": profile.user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["data"]["onboarding"]["needs_specialisation"] is True
+
+    def test_trainer_with_specialisations_needs_specialisation_false(self, api_client):
+        from apps.profiles.tests.factories import (
+            SpecialisationFactory,
+            TrainerProfileFactory,
+        )
+
+        profile = TrainerProfileFactory()
+        spec = SpecialisationFactory(name="LoginSpec")
+        profile.specialisations.add(spec)
+        resp = api_client.post(
+            self.URL,
+            {"email": profile.user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["data"]["onboarding"]["needs_specialisation"] is False
+
+    def test_login_response_no_wizard_step_key(self, api_client):
+        user = UserFactory()
+        resp = api_client.post(
+            self.URL,
+            {"email": user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert "wizard_step" not in resp.data["data"]["onboarding"]
+
+    def test_login_response_no_is_completed_key(self, api_client):
+        user = UserFactory()
+        resp = api_client.post(
+            self.URL,
+            {"email": user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert "is_completed" not in resp.data["data"]["onboarding"]
+
+    def test_gym_login_needs_specialisation_false(self, api_client):
+        from apps.profiles.tests.factories import GymProfileFactory
+
+        profile = GymProfileFactory()
+        resp = api_client.post(
+            self.URL,
+            {"email": profile.user.email, "password": "StrongPass123!"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["data"]["onboarding"]["needs_specialisation"] is False

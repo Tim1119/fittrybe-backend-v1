@@ -64,26 +64,24 @@ def _decode_uid(uid):
 
 
 def _get_onboarding_data(user, is_first_login):
-    wizard_step = 0
+    needs_specialisation = False
     profile_completion = 0
 
     try:
         if user.role == "trainer":
             profile = user.trainer_profile
-            wizard_step = profile.wizard_step
             profile_completion = profile.profile_completion_percentage
+            needs_specialisation = not profile.specialisations.exists()
         elif user.role == "gym":
             profile = user.gym_profile
-            wizard_step = profile.wizard_step
             profile_completion = profile.profile_completion_percentage
     except Exception:
         pass
 
     return {
         "status": user.onboarding_status,
-        "is_completed": user.onboarding_status == user.OnboardingStatus.COMPLETED,
         "is_first_login": is_first_login,
-        "wizard_step": wizard_step,
+        "needs_specialisation": needs_specialisation,
         "profile_completion_percentage": profile_completion,
     }
 

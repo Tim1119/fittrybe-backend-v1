@@ -308,18 +308,15 @@ class TestWizardStep4View:
         resp = client.post(self.URL)
         assert resp.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_blocked_when_profile_completion_below_60(self):
-        profile = TrainerProfileFactory()  # 0% completion
+    def test_low_completion_does_not_block_publish(self):
+        profile = TrainerProfileFactory()  # minimal completion
         BasicPlanFactory()
         SubscriptionFactory(user=profile.user)
         client = _auth_client(profile.user)
         resp = client.post(self.URL)
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST
-        assert "missing_fields" in resp.data["errors"]
-        assert resp.data["errors"]["minimum_required"] == 60
+        assert resp.status_code == status.HTTP_200_OK
 
-    def test_blocked_at_exactly_59_percent(self):
-        # full_name(15) + bio(15) + location(10) + years_exp(5) + cover_photo(5) = 50
+    def test_publish_at_any_completion_percentage(self):
         profile = TrainerProfileFactory(
             full_name="Trainer",
             bio="Some bio",
@@ -327,13 +324,12 @@ class TestWizardStep4View:
             years_experience=3,
             cover_photo_url="http://example.com/cover.jpg",
         )
-        # completion = 15+15+10+5+5 = 50 < 60
         assert profile.profile_completion_percentage < 60
         BasicPlanFactory()
         SubscriptionFactory(user=profile.user)
         client = _auth_client(profile.user)
         resp = client.post(self.URL)
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.django_db
@@ -348,7 +344,7 @@ class TestWizardStatusView:
         data = resp.data["data"]
         assert "profile_completion_percentage" in data
         assert "missing_fields" in data
-        assert data["wizard_step"] == 1
+        assert "needs_specialisation" in data
 
 
 @pytest.mark.django_db
@@ -562,3 +558,326 @@ class TestProfileVisibilityView:
         client = _auth_client(profile.user)
         resp = client.patch(self.URL, {}, format="json")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# ---------------------------------------------------------------------------
+# Publish gate removed
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestWizardPublishGateRemoved:
+    URL = "/api/v1/profiles/wizard/step4/publish/"
+
+    def test_low_completion_trainer_can_publish(self):
+        profile = TrainerProfileFactory()  # minimal completion
+        BasicPlanFactory()
+        SubscriptionFactory(user=profile.user)
+        client = _auth_client(profile.user)
+        resp = client.post(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        profile.refresh_from_db()
+        assert profile.is_published is True
+
+
+# ---------------------------------------------------------------------------
+# Specialisation sub-resource
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestProfileSpecialisationView:
+    POST_URL = "/api/v1/profiles/me/specialisations/"
+
+    def _detail_url(self, spec_id):
+        return f"/api/v1/profiles/me/specialisations/{spec_id}/"
+
+    def test_post_with_valid_ids_attaches_specialisations(self):
+        profile = TrainerProfileFactory()
+        s1 = SpecialisationFactory(name="YogaNew")
+        s2 = SpecialisationFactory(name="HIITNew")
+        client = _auth_client(profile.user)
+        resp = client.post(
+            self.POST_URL,
+            {"specialisation_ids": [s1.id, s2.id], "custom_names": []},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert profile.specialisations.count() == 2
+
+    def test_post_with_custom_names_creates_and_attaches(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.post(
+            self.POST_URL,
+            {"specialisation_ids": [], "custom_names": ["Crossfit", "Mobility"]},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert profile.specialisations.count() == 2
+        names = list(profile.specialisations.values_list("name", flat=True))
+        assert "Crossfit" in names
+        assert "Mobility" in names
+
+    def test_post_exceeding_10_total_returns_400(self):
+        profile = TrainerProfileFactory()
+        existing = [SpecialisationFactory(name=f"ExistSpec{i}") for i in range(8)]
+        profile.specialisations.set(existing)
+        new_specs = [SpecialisationFactory(name=f"AddSpec{i}") for i in range(3)]
+        client = _auth_client(profile.user)
+        resp = client.post(
+            self.POST_URL,
+            {"specialisation_ids": [s.id for s in new_specs], "custom_names": []},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_post_as_client_returns_403(self):
+        cp = ClientProfileFactory()
+        client = _auth_client(cp.user)
+        resp = client.post(
+            self.POST_URL,
+            {"specialisation_ids": [], "custom_names": []},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_delete_removes_specialisation_from_profile(self):
+        profile = TrainerProfileFactory()
+        spec = SpecialisationFactory(name="PilatesSpec")
+        profile.specialisations.add(spec)
+        client = _auth_client(profile.user)
+        resp = client.delete(self._detail_url(spec.id))
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        assert not profile.specialisations.filter(id=spec.id).exists()
+
+    def test_delete_when_not_attached_returns_404(self):
+        profile = TrainerProfileFactory()
+        spec = SpecialisationFactory(name="UnattachedSpec")
+        client = _auth_client(profile.user)
+        resp = client.delete(self._detail_url(spec.id))
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# Services sub-resource
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestProfileServiceEndpoints:
+    LIST_URL = "/api/v1/profiles/me/services/"
+
+    def _detail_url(self, service_id):
+        return f"/api/v1/profiles/me/services/{service_id}/"
+
+    def test_get_returns_own_services_only(self):
+        profile = TrainerProfileFactory()
+        ServiceTrainerFactory(trainer=profile, name="My Own Service")
+        ServiceTrainerFactory(name="Other Trainer Service")
+        client = _auth_client(profile.user)
+        resp = client.get(self.LIST_URL)
+        assert resp.status_code == status.HTTP_200_OK
+        names = [s["name"] for s in resp.data["data"]]
+        assert "My Own Service" in names
+        assert "Other Trainer Service" not in names
+
+    def test_post_creates_service(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.post(
+            self.LIST_URL,
+            {
+                "name": "Personal Training",
+                "session_type": "physical",
+                "display_order": 0,
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert profile.services.filter(name="Personal Training").exists()
+
+    def test_put_updates_service(self):
+        profile = TrainerProfileFactory()
+        svc = ServiceTrainerFactory(trainer=profile, name="Old Name")
+        client = _auth_client(profile.user)
+        resp = client.put(
+            self._detail_url(svc.id),
+            {"name": "Updated Name", "session_type": "both", "display_order": 1},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        svc.refresh_from_db()
+        assert svc.name == "Updated Name"
+
+    def test_put_another_trainers_service_returns_404(self):
+        profile = TrainerProfileFactory()
+        other_svc = ServiceTrainerFactory(name="Other Service")
+        client = _auth_client(profile.user)
+        resp = client.put(
+            self._detail_url(other_svc.id),
+            {"name": "Hacked", "session_type": "both", "display_order": 0},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_delete_service(self):
+        profile = TrainerProfileFactory()
+        svc = ServiceTrainerFactory(trainer=profile, name="To Delete")
+        client = _auth_client(profile.user)
+        resp = client.delete(self._detail_url(svc.id))
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        assert not profile.services.filter(id=svc.id).exists()
+
+    def test_client_gets_403_on_all_service_endpoints(self):
+        cp = ClientProfileFactory()
+        client = _auth_client(cp.user)
+        assert client.get(self.LIST_URL).status_code == status.HTTP_403_FORBIDDEN
+        assert (
+            client.post(self.LIST_URL, {}, format="json").status_code
+            == status.HTTP_403_FORBIDDEN
+        )
+
+
+# ---------------------------------------------------------------------------
+# Certifications sub-resource
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestProfileCertificationEndpoints:
+    LIST_URL = "/api/v1/profiles/me/certifications/"
+
+    def _detail_url(self, cert_id):
+        return f"/api/v1/profiles/me/certifications/{cert_id}/"
+
+    def test_get_returns_own_certifications(self):
+        profile = TrainerProfileFactory()
+        CertificationFactory(trainer=profile, name="My Cert")
+        client = _auth_client(profile.user)
+        resp = client.get(self.LIST_URL)
+        assert resp.status_code == status.HTTP_200_OK
+        names = [c["name"] for c in resp.data["data"]]
+        assert "My Cert" in names
+
+    def test_post_as_trainer_creates_certification(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.post(
+            self.LIST_URL,
+            {"name": "ACE Certified", "issuing_body": "ACE", "year_obtained": 2022},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert profile.certifications.filter(name="ACE Certified").exists()
+
+    def test_post_as_gym_returns_403(self):
+        profile = GymProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.post(
+            self.LIST_URL,
+            {"name": "Gym Cert", "issuing_body": "GYM", "year_obtained": 2020},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_put_updates_certification(self):
+        profile = TrainerProfileFactory()
+        cert = CertificationFactory(trainer=profile, name="Old Cert")
+        client = _auth_client(profile.user)
+        resp = client.put(
+            self._detail_url(cert.id),
+            {"name": "Updated Cert", "issuing_body": "NASM", "year_obtained": 2023},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        cert.refresh_from_db()
+        assert cert.name == "Updated Cert"
+
+    def test_delete_certification(self):
+        profile = TrainerProfileFactory()
+        cert = CertificationFactory(trainer=profile, name="To Delete Cert")
+        client = _auth_client(profile.user)
+        resp = client.delete(self._detail_url(cert.id))
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        assert not profile.certifications.filter(id=cert.id).exists()
+
+
+# ---------------------------------------------------------------------------
+# Availability sub-resource
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestProfileAvailabilityEndpoints:
+    LIST_URL = "/api/v1/profiles/me/availability/"
+
+    def _detail_url(self, av_id):
+        return f"/api/v1/profiles/me/availability/{av_id}/"
+
+    def _av_payload(self, day="monday"):
+        return {
+            "day_of_week": day,
+            "start_time": "06:00",
+            "end_time": "12:00",
+            "session_type": "both",
+            "duration_minutes": 60,
+            "virtual_platform": "",
+            "notes": "",
+        }
+
+    def test_get_returns_own_records(self):
+        profile = TrainerProfileFactory()
+        AvailabilityTrainerFactory(trainer=profile, day_of_week="tuesday")
+        other_profile = TrainerProfileFactory()
+        AvailabilityTrainerFactory(trainer=other_profile, day_of_week="wednesday")
+        client = _auth_client(profile.user)
+        resp = client.get(self.LIST_URL)
+        assert resp.status_code == status.HTTP_200_OK
+        assert len(resp.data["data"]) == 1
+
+    def test_post_creates_availability_for_trainer(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.post(self.LIST_URL, self._av_payload(), format="json")
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert profile.availability.filter(day_of_week="monday").exists()
+
+    def test_post_duplicate_day_returns_400(self):
+        profile = TrainerProfileFactory()
+        AvailabilityTrainerFactory(trainer=profile, day_of_week="monday")
+        client = _auth_client(profile.user)
+        resp = client.post(self.LIST_URL, self._av_payload("monday"), format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_put_updates_availability(self):
+        profile = TrainerProfileFactory()
+        av = AvailabilityTrainerFactory(
+            trainer=profile,
+            day_of_week="friday",
+            start_time="08:00",
+            end_time="10:00",
+        )
+        client = _auth_client(profile.user)
+        payload = self._av_payload("friday")
+        payload["start_time"] = "09:00"
+        payload["end_time"] = "11:00"
+        resp = client.put(self._detail_url(av.id), payload, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        av.refresh_from_db()
+        assert str(av.start_time) == "09:00:00"
+
+    def test_delete_availability(self):
+        profile = TrainerProfileFactory()
+        av = AvailabilityTrainerFactory(trainer=profile, day_of_week="saturday")
+        client = _auth_client(profile.user)
+        resp = client.delete(self._detail_url(av.id))
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        assert not profile.availability.filter(id=av.id).exists()
+
+    def test_gym_can_post_availability(self):
+        profile = GymProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.post(self.LIST_URL, self._av_payload(), format="json")
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert profile.availability.filter(day_of_week="monday").exists()
