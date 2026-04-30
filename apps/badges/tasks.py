@@ -90,13 +90,13 @@ def post_badge_to_chatroom(assignment_id):
     except Exception:
         return
 
-    client_name = assignment.client.display_name or assignment.client.username
+    client_name = assignment.client.full_name or assignment.client.username
     assigner = assignment.assigned_by
     content = f"🏅 {client_name} just earned the {assignment.badge.name} badge!"
     if assignment.note:
         content += f' "{assignment.note}"'
     if assigner:
-        content += f" — {assigner.display_name}"
+        content += f" — {assigner.full_name_display}"
 
     Message.objects.create(
         chatroom=chatroom,

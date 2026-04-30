@@ -18,12 +18,11 @@ User = get_user_model()
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def make_user(role, email, display_name="Test User", **kwargs):
+def make_user(role, email, **kwargs):
     return User.objects.create_user(
         email=email,
         password="Test1234!",
         role=role,
-        display_name=display_name,
         is_email_verified=True,
         is_active=True,
         **kwargs,
@@ -31,7 +30,7 @@ def make_user(role, email, display_name="Test User", **kwargs):
 
 
 def make_trainer_user(email="trainer@chat.test", name="Test Trainer"):
-    user = make_user("trainer", email, display_name=name)
+    user = make_user("trainer", email)
     profile = TrainerProfile.objects.create(
         user=user,
         full_name=name,
@@ -42,19 +41,18 @@ def make_trainer_user(email="trainer@chat.test", name="Test Trainer"):
 
 
 def make_gym_user(email="gym@chat.test", name="Test Gym"):
-    user = make_user("gym", email, display_name=name)
+    user = make_user("gym", email)
     profile = GymProfile.objects.create(
         user=user,
-        gym_name=name,
-        admin_full_name="Admin",
+        full_name=name,
         is_published=True,
     )
     return user, profile
 
 
 def make_client_user(email="client@chat.test", name="Test Client"):
-    user = make_user("client", email, display_name=name)
-    profile = ClientProfile.objects.create(user=user, display_name=name)
+    user = make_user("client", email)
+    profile = ClientProfile.objects.create(user=user, full_name=name)
     return user, profile
 
 
@@ -67,7 +65,7 @@ def make_chatroom(trainer=None, gym=None, name=None):
         )
         return room
     else:
-        name = name or f"{gym.gym_name}'s Community"
+        name = name or f"{gym.full_name}'s Community"
         room, _ = Chatroom.objects.get_or_create(gym=gym, defaults={"name": name})
         return room
 

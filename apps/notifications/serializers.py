@@ -23,8 +23,11 @@ class FCMDeviceSerializer(serializers.ModelSerializer):
 
 class NotificationSenderSerializer(serializers.Serializer):
     id = serializers.UUIDField()
-    display_name = serializers.CharField()
+    full_name = serializers.SerializerMethodField()
     photo_url = serializers.SerializerMethodField()
+
+    def get_full_name(self, obj):
+        return obj.full_name_display
 
     def get_photo_url(self, obj):
         try:

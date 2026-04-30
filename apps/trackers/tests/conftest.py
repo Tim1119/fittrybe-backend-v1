@@ -17,7 +17,7 @@ def make_client_user(email="client@tracker.test"):
         is_email_verified=True,
         is_active=True,
     )
-    profile = ClientProfile.objects.create(user=user, display_name="Test Client")
+    profile = ClientProfile.objects.create(user=user, full_name="Test Client")
     return user, profile
 
 

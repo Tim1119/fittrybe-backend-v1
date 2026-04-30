@@ -142,16 +142,14 @@ _ROLE_SERIALIZER_MAP = {
         "Sends a verification email upon success. "
         "Rate limited to 5 registrations per hour per IP.\n\n"
         "**Role: `trainer`** — required fields: "
-        "`email`, `password`, `confirm_password`, `display_name`, "
-        "`full_name`, `terms_accepted`; "
-        "optional: `phone_number`.\n\n"
+        "`email`, `password`, `confirm_password`, `full_name`, "
+        "`country`, `terms_accepted`.\n\n"
         "**Role: `gym`** — required fields: "
-        "`email`, `password`, `confirm_password`, `gym_name`, "
-        "`admin_full_name`, `terms_accepted`; "
-        "optional: `phone_number`, `city`.\n\n"
+        "`email`, `password`, `confirm_password`, `full_name`, "
+        "`country`, `terms_accepted`.\n\n"
         "**Role: `client`** — required fields: "
-        "`email`, `password`, `confirm_password`, `display_name`, "
-        "`terms_accepted`."
+        "`email`, `password`, `confirm_password`, `full_name`, "
+        "`country`, `terms_accepted`."
     ),
     request=inline_serializer(
         name="RegisterRequest",
@@ -160,25 +158,11 @@ _ROLE_SERIALIZER_MAP = {
             "password": drf_serializers.CharField(),
             "confirm_password": drf_serializers.CharField(),
             "role": drf_serializers.ChoiceField(choices=User.Role.choices),
-            "display_name": drf_serializers.CharField(
-                required=False,
-                help_text="Trainer and client: public display name",
-            ),
             "full_name": drf_serializers.CharField(
-                required=False,
-                help_text="Trainer only: full legal name used on profile",
+                help_text="Display name stored on the role-specific profile",
             ),
-            "gym_name": drf_serializers.CharField(
-                required=False, help_text="Gym only: official gym name"
-            ),
-            "admin_full_name": drf_serializers.CharField(
-                required=False, help_text="Gym only: full name of the admin"
-            ),
-            "phone_number": drf_serializers.CharField(
-                required=False, help_text="Trainer / gym: contact phone"
-            ),
-            "city": drf_serializers.CharField(
-                required=False, help_text="Gym only: city of operation"
+            "country": drf_serializers.CharField(
+                help_text="Full country name e.g. 'Nigeria' not 'NG'",
             ),
             "terms_accepted": drf_serializers.BooleanField(
                 help_text="Must be true — user accepts the terms of service"
@@ -394,6 +378,7 @@ class LoginView(TokenObtainPairView):
                     "refresh": response.data.get("refresh"),
                     "email": user.email,
                     "role": user.role,
+                    "country": user.country,
                     "subscription": _get_subscription_data(user),
                     "onboarding": _get_onboarding_data(user, is_first),
                 },

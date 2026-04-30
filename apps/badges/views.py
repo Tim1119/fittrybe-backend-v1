@@ -394,7 +394,7 @@ class BadgeLeaderboardView(APIView):
                 {
                     "rank": rank,
                     "client_id": str(client.id),
-                    "client_name": client.display_name or client.username,
+                    "client_name": client.full_name or client.username,
                     "photo_url": client.profile_photo_url,
                     "sessions_this_week": row["sessions_this_week"],
                     "total_badges_count": total_badges,
@@ -517,7 +517,7 @@ class WeeklyRecognitionPostView(APIView):
                     )
                     if item["note"]:
                         lines.append(f'   "{item["note"]}"')
-                recogniser = request.user.display_name or request.user.username
+                recogniser = request.user.full_name_display
                 lines.append(f"Recognised by {recogniser}")
                 content = "\n".join(lines)
 

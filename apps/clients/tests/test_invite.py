@@ -175,7 +175,7 @@ class TestInvitePreview:
         assert resp.status_code == 200
         data = resp.data["data"]
         assert data["type"] == "gym"
-        assert data["name"] == invite.gym.gym_name
+        assert data["name"] == invite.gym.full_name
 
     def test_preview_returns_404_for_unknown_token(self, api_client):
         resp = api_client.get(preview_url("unknowntoken999"))

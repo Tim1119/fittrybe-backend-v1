@@ -63,8 +63,7 @@ class GymProfileFactory(DjangoModelFactory):
         model = GymProfile
 
     user = factory.SubFactory(GymFactory)
-    gym_name = factory.Sequence(lambda n: f"Gym {n}")
-    admin_full_name = factory.LazyAttribute(lambda _: fake.name())
+    full_name = factory.Sequence(lambda n: f"Gym {n}")
     about = ""
     location = ""
     city = ""
@@ -164,5 +163,5 @@ class ClientProfileFactory(DjangoModelFactory):
         model = ClientProfile
 
     user = factory.SubFactory(ClientFactory)
-    display_name = factory.LazyAttribute(lambda obj: obj.user.display_name or "User")
+    full_name = "Test Client"
     profile_photo_url = ""

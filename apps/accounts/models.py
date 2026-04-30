@@ -47,7 +47,7 @@ class User(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
 
     # Profile
-    display_name = models.CharField(max_length=100, blank=True)
+    country = models.CharField(max_length=100, blank=True)
     terms_accepted_at = models.DateTimeField(null=True, blank=True)
 
     # Soft delete
@@ -93,6 +93,19 @@ class User(AbstractUser):
     @property
     def is_deleted(self):
         return self.deleted_at is not None
+
+    @property
+    def full_name_display(self):
+        try:
+            if self.role == "trainer":
+                return self.trainer_profile.full_name
+            elif self.role == "gym":
+                return self.gym_profile.full_name
+            elif self.role == "client":
+                return self.client_profile.full_name
+        except Exception:
+            pass
+        return self.email.split("@")[0]
 
     def complete_onboarding(self):
         from django.utils import timezone

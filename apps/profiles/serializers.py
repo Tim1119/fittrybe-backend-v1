@@ -179,9 +179,8 @@ class GymProfileSerializer(serializers.ModelSerializer):
         model = GymProfile
         fields = (
             "id",
-            "gym_name",
+            "full_name",
             "slug",
-            "admin_full_name",
             "about",
             "location",
             "city",
@@ -227,7 +226,7 @@ class GymProfilePublicSerializer(serializers.ModelSerializer):
         model = GymProfile
         fields = (
             "id",
-            "gym_name",
+            "full_name",
             "slug",
             "about",
             "location",
@@ -264,7 +263,7 @@ class ClientProfileSerializer(serializers.ModelSerializer):
         model = ClientProfile
         fields = (
             "id",
-            "display_name",
+            "full_name",
             "username",
             "profile_photo_url",
             "profile_completion_percentage",
@@ -297,8 +296,7 @@ class WizardStep1GymSerializer(serializers.ModelSerializer):
     class Meta:
         model = GymProfile
         fields = (
-            "gym_name",
-            "admin_full_name",
+            "full_name",
             "about",
             "location",
             "city",
@@ -391,7 +389,7 @@ class CoverUploadSerializer(serializers.Serializer):
 
 
 class ReviewClientSerializer(serializers.Serializer):
-    display_name = serializers.CharField(read_only=True)
+    full_name = serializers.CharField(read_only=True)
     profile_photo_url = serializers.URLField(read_only=True)
 
 

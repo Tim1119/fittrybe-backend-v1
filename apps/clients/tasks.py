@@ -33,7 +33,7 @@ def send_payment_reminders():
         owner_name = (
             membership.trainer.full_name
             if membership.trainer_id
-            else membership.gym.gym_name
+            else membership.gym.full_name
         )
         try:
             send_client_reminder_email(membership, owner_name)

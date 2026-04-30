@@ -20,9 +20,7 @@ class SellerSerializer(serializers.Serializer):
     seller_type = serializers.SerializerMethodField()
 
     def get_name(self, obj):
-        if hasattr(obj, "full_name"):
-            return obj.full_name
-        return obj.gym_name
+        return obj.full_name
 
     def get_photo_url(self, obj):
         if hasattr(obj, "profile_photo_url"):
@@ -30,7 +28,7 @@ class SellerSerializer(serializers.Serializer):
         return obj.logo_url
 
     def get_seller_type(self, obj):
-        if hasattr(obj, "full_name"):
+        if hasattr(obj, "trainer_type"):
             return "trainer"
         return "gym"
 
@@ -152,6 +150,6 @@ class ProductEnquirySerializer(serializers.ModelSerializer):
 
     def get_client(self, obj):
         return {
-            "display_name": obj.client.display_name,
+            "full_name": obj.client.full_name,
             "username": obj.client.username,
         }

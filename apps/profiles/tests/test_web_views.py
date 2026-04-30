@@ -79,7 +79,7 @@ class TestGymWebProfile:
         assert "text/html" in response["Content-Type"]
 
     def test_contains_gym_name(self, client):
-        profile = PublishedGymProfileFactory(gym_name="Iron Palace")
+        profile = PublishedGymProfileFactory(full_name="Iron Palace")
         response = client.get(f"/gym/{profile.slug}/")
         assert b"Iron Palace" in response.content
 

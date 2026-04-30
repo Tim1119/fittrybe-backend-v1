@@ -142,7 +142,6 @@ class Command(BaseCommand):
             email=email,
             password="Test1234!",
             role="gym",
-            display_name=gym_name,
             is_email_verified=True,
             is_active=True,
             onboarding_status="completed",
@@ -150,8 +149,7 @@ class Command(BaseCommand):
 
         profile = GymProfile.objects.create(
             user=user,
-            gym_name=gym_name,
-            admin_full_name=f"Admin of {gym_name}",
+            full_name=gym_name,
             about=f"Premier fitness facility in {city}.",
             location=f"{city}, Nigeria",
             city=city,
@@ -220,7 +218,6 @@ class Command(BaseCommand):
             email=email,
             password="Test1234!",
             role="trainer",
-            display_name=full_name,
             is_email_verified=True,
             is_active=True,
             onboarding_status="completed",
@@ -317,13 +314,12 @@ class Command(BaseCommand):
             email=email,
             password="Test1234!",
             role="client",
-            display_name=display_name,
             is_email_verified=True,
             is_active=True,
         )
         profile = ClientProfile.objects.create(
             user=user,
-            display_name=display_name,
+            full_name=display_name,
         )
 
         return profile

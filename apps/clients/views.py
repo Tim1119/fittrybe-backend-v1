@@ -223,7 +223,7 @@ class ClientReminderView(APIView):
         owner_name = (
             membership.trainer.full_name
             if membership.trainer_id
-            else membership.gym.gym_name
+            else membership.gym.full_name
         )
         try:
             send_client_reminder_email(membership, owner_name)
@@ -507,7 +507,7 @@ class InviteAcceptView(APIView):
             invite.save(update_fields=["uses_count"])
 
         owner_name = (
-            invite.trainer.full_name if invite.trainer_id else invite.gym.gym_name
+            invite.trainer.full_name if invite.trainer_id else invite.gym.full_name
         )
         serializer = ClientMembershipSerializer(membership)
         return APIResponse.created(

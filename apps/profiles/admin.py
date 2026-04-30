@@ -80,14 +80,14 @@ class TrainerProfileAdmin(admin.ModelAdmin):
 @admin.register(GymProfile)
 class GymProfileAdmin(admin.ModelAdmin):
     list_display = (
-        "gym_name",
+        "full_name",
         "slug",
         "is_published",
         "avg_rating",
         "wizard_step",
     )
     list_filter = ("is_published", "wizard_completed")
-    search_fields = ("gym_name", "user__email", "city", "location")
+    search_fields = ("full_name", "user__email", "city", "location")
     raw_id_fields = ("user",)
     inlines = [AvailabilityGymInline, ServiceGymInline]
     readonly_fields = ("slug", "avg_rating", "rating_count", "created_at", "updated_at")
@@ -112,14 +112,14 @@ class GymTrainerAdmin(admin.ModelAdmin):
 class ServiceAdmin(admin.ModelAdmin):
     list_display = ("name", "session_type", "display_order", "trainer", "gym")
     list_filter = ("session_type",)
-    search_fields = ("name", "trainer__full_name", "gym__gym_name")
+    search_fields = ("name", "trainer__full_name", "gym__full_name")
     raw_id_fields = ("trainer", "gym")
 
 
 @admin.register(ClientProfile)
 class ClientProfileAdmin(admin.ModelAdmin):
-    list_display = ("display_name", "username", "get_user_email", "created_at")
-    search_fields = ("username", "user__email", "display_name")
+    list_display = ("full_name", "username", "get_user_email", "created_at")
+    search_fields = ("username", "user__email", "full_name")
     raw_id_fields = ("user",)
     readonly_fields = ("username", "created_at", "updated_at")
 
@@ -153,6 +153,6 @@ class CertificationAdmin(admin.ModelAdmin):
 class ReviewAdmin(admin.ModelAdmin):
     list_display = ("client", "trainer", "gym", "rating", "created_at")
     list_filter = ("rating",)
-    search_fields = ("client__user__email", "trainer__full_name", "gym__gym_name")
+    search_fields = ("client__user__email", "trainer__full_name", "gym__full_name")
     raw_id_fields = ("client", "trainer", "gym")
     readonly_fields = ("created_at", "updated_at")

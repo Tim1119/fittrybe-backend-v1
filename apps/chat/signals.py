@@ -42,7 +42,7 @@ def create_gym_chatroom(sender, instance, **kwargs):
     if not instance.is_published:
         return
 
-    name = f"{instance.gym_name}'s Community"
+    name = f"{instance.full_name}'s Community"
     chatroom, created = Chatroom.objects.get_or_create(
         gym=instance,
         defaults={"name": name},

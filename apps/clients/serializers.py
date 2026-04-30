@@ -10,7 +10,7 @@ from apps.clients.models import ClientMembership, InviteLink
 
 class ClientProfileMiniSerializer(serializers.Serializer):
     id = serializers.UUIDField(source="user.id", read_only=True)
-    display_name = serializers.CharField(read_only=True)
+    full_name = serializers.CharField(read_only=True)
     username = serializers.CharField(read_only=True)
     profile_photo_url = serializers.URLField(read_only=True)
 
@@ -28,7 +28,7 @@ class TrainerMiniSerializer(serializers.Serializer):
 
 class GymMiniSerializer(serializers.Serializer):
     id = serializers.UUIDField(source="user.id", read_only=True)
-    gym_name = serializers.CharField(read_only=True)
+    full_name = serializers.CharField(read_only=True)
 
 
 class ClientMembershipSerializer(serializers.ModelSerializer):
@@ -109,7 +109,7 @@ class InviteLinkSerializer(serializers.ModelSerializer):
     def get_owner_name(self, obj):
         if obj.trainer_id:
             return obj.trainer.full_name
-        return obj.gym.gym_name
+        return obj.gym.full_name
 
 
 class InvitePreviewSerializer(serializers.Serializer):
@@ -128,7 +128,7 @@ class InvitePreviewSerializer(serializers.Serializer):
     def get_name(self, obj):
         if obj.trainer_id:
             return obj.trainer.full_name
-        return obj.gym.gym_name
+        return obj.gym.full_name
 
     def get_photo_url(self, obj):
         if obj.trainer_id:

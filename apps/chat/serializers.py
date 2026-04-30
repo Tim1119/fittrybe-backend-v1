@@ -17,8 +17,12 @@ from apps.chat.models import (
 
 class SenderSerializer(serializers.Serializer):
     id = serializers.UUIDField()
-    display_name = serializers.CharField()
+    full_name = serializers.SerializerMethodField()
     role = serializers.CharField()
+
+    def get_full_name(self, obj):
+        return obj.full_name_display
+
     profile_photo_url = serializers.SerializerMethodField()
     sender_type = serializers.SerializerMethodField()
 
@@ -196,7 +200,7 @@ class ChatroomSerializer(serializers.ModelSerializer):
     def get_owner_name(self, obj):
         if obj.trainer_id:
             return obj.trainer.full_name
-        return obj.gym.gym_name
+        return obj.gym.full_name
 
     def get_owner_photo_url(self, obj):
         if obj.trainer_id:

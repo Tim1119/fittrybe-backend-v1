@@ -670,7 +670,7 @@ class ProductEnquireView(APIView):
         send_push_notification.delay(
             str(owner_user.id),
             "New Enquiry",
-            f"{client_profile.display_name} enquired about {product.name}",
+            f"{client_profile.full_name} enquired about {product.name}",
             {
                 "type": "marketplace_enquiry",
                 "product_id": str(product.id),
@@ -680,7 +680,7 @@ class ProductEnquireView(APIView):
             recipient=owner_user,
             notification_type=Notification.NotificationType.MARKETPLACE_ENQUIRY,
             title="New Enquiry",
-            body=f"{client_profile.display_name} enquired about {product.name}",
+            body=f"{client_profile.full_name} enquired about {product.name}",
             data={"product_id": str(product.id)},
         )
 
@@ -814,11 +814,8 @@ class ProductEnquiryRespondView(APIView):
         enquiry.responded_at = timezone.now()
         enquiry.save(update_fields=["trainer_response", "status", "responded_at"])
 
-        seller_name = product.get_owner_profile()
-        if hasattr(seller_name, "full_name"):
-            seller_name = seller_name.full_name
-        else:
-            seller_name = seller_name.gym_name
+        seller_profile = product.get_owner_profile()
+        seller_name = seller_profile.full_name if seller_profile else ""
 
         client_user = enquiry.client.user
         send_push_notification.delay(

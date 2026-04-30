@@ -60,7 +60,7 @@ class ClientMembership(BaseModel):
             )
 
     def __str__(self):
-        owner = self.trainer.full_name if self.trainer_id else self.gym.gym_name
+        owner = self.trainer.full_name if self.trainer_id else self.gym.full_name
         return f"{self.client} → {owner} [{self.status}]"
 
 
@@ -110,7 +110,7 @@ class InviteLink(models.Model):
         if self.trainer:
             owner = self.trainer.full_name
         elif self.gym:
-            owner = self.gym.gym_name
+            owner = self.gym.full_name
         else:
             owner = "Unknown"
         return f"InviteLink({self.token[:8]}...) → {owner}"

@@ -131,9 +131,8 @@ class GymProfile(BaseModel):
         on_delete=models.CASCADE,
         related_name="gym_profile",
     )
-    gym_name = models.CharField(max_length=200)
-    slug = AutoSlugField(populate_from="gym_name", unique=True, always_update=False)
-    admin_full_name = models.CharField(max_length=200)
+    full_name = models.CharField(max_length=200)
+    slug = AutoSlugField(populate_from="full_name", unique=True, always_update=False)
     about = models.TextField(max_length=500, blank=True)
     location = models.CharField(max_length=200, blank=True)
     city = models.CharField(max_length=100, blank=True)
@@ -156,10 +155,8 @@ class GymProfile(BaseModel):
     @property
     def profile_completion_percentage(self):
         points = 0
-        if self.gym_name:
-            points += 15
-        if self.admin_full_name:
-            points += 10
+        if self.full_name:
+            points += 25
         if self.about:
             points += 15
         if self.location:
@@ -202,7 +199,7 @@ class GymProfile(BaseModel):
         return f"{settings.FRONTEND_URL}/gym/{self.slug}"
 
     def __str__(self):
-        return f"{self.gym_name} ({self.user.email})"
+        return f"{self.full_name} ({self.user.email})"
 
 
 class GymTrainer(BaseModel):
@@ -228,7 +225,7 @@ class GymTrainer(BaseModel):
         verbose_name_plural = "Gym Trainers"
 
     def __str__(self):
-        return f"{self.trainer.full_name} @ {self.gym.gym_name}"
+        return f"{self.trainer.full_name} @ {self.gym.full_name}"
 
 
 class Availability(BaseModel):
@@ -377,7 +374,7 @@ class ClientProfile(BaseModel):
         on_delete=models.CASCADE,
         related_name="client_profile",
     )
-    display_name = models.CharField(max_length=100, blank=True)
+    full_name = models.CharField(max_length=200, blank=True)
     username = AutoSlugField(
         populate_from="_get_username_base", unique=True, always_update=False
     )
@@ -394,7 +391,7 @@ class ClientProfile(BaseModel):
     @property
     def profile_completion_percentage(self):
         points = 0
-        if self.display_name:
+        if self.full_name:
             points += 50
         if self.profile_photo_url:
             points += 50

@@ -22,7 +22,7 @@ def send_client_reminder_email(membership, owner_name):
         owner_name: display name of trainer or gym
     """
     client_email = membership.client.user.email
-    client_name = membership.client.display_name or client_email.split("@")[0]
+    client_name = membership.client.full_name or client_email.split("@")[0]
     mobile_url = _mobile_url()
 
     context = {

@@ -139,7 +139,7 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
             {
                 "type": "broadcast_typing",
                 "user_id": str(self.user.id),
-                "display_name": self.user.display_name,
+                "full_name": self.user.full_name_display,
                 "is_typing": is_typing,
             },
         )
@@ -175,7 +175,7 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
                     {
                         "type": "typing.indicator",
                         "user_id": event["user_id"],
-                        "display_name": event["display_name"],
+                        "full_name": event.get("full_name", ""),
                         "is_typing": event["is_typing"],
                     }
                 )
@@ -277,7 +277,7 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
         return {
             "id": message.id,
             "sender_id": str(self.user.id),
-            "display_name": self.user.display_name,
+            "full_name": self.user.full_name_display,
             "photo_url": photo,
             "sender_type": sender_type,
             "content": message.content,
@@ -311,7 +311,7 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
                 recipient=member.user,
                 sender=self.user,
                 notification_type="chat_message",
-                title=self.user.display_name or "New Message",
+                title=self.user.full_name_display or "New Message",
                 body=message.content[:100] if message.content else "Sent an image",
                 data={
                     "type": "chat_message",
@@ -321,7 +321,7 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
             )
             send_push_notification.delay(
                 user_id=str(member.user.id),
-                title=self.user.display_name or "New Message",
+                title=self.user.full_name_display or "New Message",
                 body=message.content[:100] if message.content else "Sent an image",
                 data={
                     "type": "chat_message",
@@ -452,7 +452,7 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
         return {
             "id": message.id,
             "sender_id": str(self.user.id),
-            "display_name": self.user.display_name,
+            "full_name": self.user.full_name_display,
             "content": message.content,
             "message_type": message.message_type,
             "attachment_url": message.attachment_url,
@@ -469,7 +469,7 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             recipient=recipient,
             sender=self.user,
             notification_type="direct_message",
-            title=self.user.display_name or "New Message",
+            title=self.user.full_name_display or "New Message",
             body=message.content[:100] if message.content else "Sent an image",
             data={
                 "type": "direct_message",
@@ -478,7 +478,7 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
         )
         send_push_notification.delay(
             user_id=str(recipient.id),
-            title=self.user.display_name or "New Message",
+            title=self.user.full_name_display or "New Message",
             body=message.content[:100] if message.content else "Sent an image",
             data={
                 "type": "direct_message",

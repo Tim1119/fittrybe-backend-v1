@@ -51,14 +51,14 @@ class TestRegisterView:
             "password": STRONG,
             "confirm_password": STRONG,
             "role": role,
-            "display_name": "Test User",
+            "full_name": "Test User",
+            "country": "Nigeria",
             "terms_accepted": True,
         }
         if role == "trainer":
             defaults["full_name"] = "Test Trainer Full"
         elif role == "gym":
-            defaults["gym_name"] = "Test Gym"
-            defaults["admin_full_name"] = "Admin User"
+            defaults["full_name"] = "Test Gym"
         defaults.update(kw)
         return defaults
 
@@ -72,8 +72,7 @@ class TestRegisterView:
             self._payload(
                 email="gym@example.com",
                 role="gym",
-                gym_name="Fit Gym",
-                admin_full_name="Gym Admin",
+                full_name="Fit Gym",
             ),
             format="json",
         )
@@ -82,7 +81,11 @@ class TestRegisterView:
     def test_register_client_returns_201(self, api_client):
         resp = api_client.post(
             self.URL,
-            self._payload(email="client@example.com", role="client"),
+            self._payload(
+                email="client@example.com",
+                role="client",
+                full_name="Jane Client",
+            ),
             format="json",
         )
         assert resp.status_code == status.HTTP_201_CREATED
@@ -93,9 +96,9 @@ class TestRegisterView:
         resp = api_client.post(self.URL, payload, format="json")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_gym_missing_gym_name_returns_400(self, api_client):
+    def test_gym_missing_full_name_returns_400(self, api_client):
         payload = self._payload(email="gymx@example.com", role="gym")
-        payload.pop("gym_name")
+        payload.pop("full_name")
         resp = api_client.post(self.URL, payload, format="json")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -137,8 +140,7 @@ class TestRegisterView:
         payload = self._payload(
             email="gym2@example.com",
             role="gym",
-            gym_name="Gym 2",
-            admin_full_name="Admin",
+            full_name="Gym 2",
         )
         payload.pop("terms_accepted")
         resp = api_client.post(self.URL, payload, format="json")
@@ -150,19 +152,19 @@ class TestRegisterView:
         resp = api_client.post(self.URL, payload, format="json")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    # --- display_name and terms_accepted_at persistence ---
+    # --- full_name and terms_accepted_at persistence ---
 
-    def test_display_name_saved_on_trainer(self, api_client):
-        from apps.accounts.models import User
+    def test_full_name_saved_on_trainer_profile(self, api_client):
+        from apps.profiles.models import TrainerProfile
 
         resp = api_client.post(
             self.URL,
-            self._payload(display_name="Jane Trainer", full_name="Jane Full Name"),
+            self._payload(full_name="Jane Full Name"),
             format="json",
         )
         assert resp.status_code == status.HTTP_201_CREATED
-        user = User.objects.get(email="new@example.com")
-        assert user.display_name == "Jane Trainer"
+        profile = TrainerProfile.objects.get(user__email="new@example.com")
+        assert profile.full_name == "Jane Full Name"
 
     def test_terms_accepted_at_set_on_trainer(self, api_client):
         from apps.accounts.models import User
@@ -171,19 +173,19 @@ class TestRegisterView:
         user = User.objects.get(email="new@example.com")
         assert user.terms_accepted_at is not None
 
-    def test_display_name_saved_on_client(self, api_client):
-        from apps.accounts.models import User
+    def test_full_name_saved_on_client_profile(self, api_client):
+        from apps.profiles.models import ClientProfile
 
         resp = api_client.post(
             self.URL,
             self._payload(
-                email="clientdn@example.com", role="client", display_name="Joe Client"
+                email="clientdn@example.com", role="client", full_name="Joe Client"
             ),
             format="json",
         )
         assert resp.status_code == status.HTTP_201_CREATED
-        user = User.objects.get(email="clientdn@example.com")
-        assert user.display_name == "Joe Client"
+        profile = ClientProfile.objects.get(user__email="clientdn@example.com")
+        assert profile.full_name == "Joe Client"
 
     def test_terms_accepted_at_set_on_gym(self, api_client):
         from apps.accounts.models import User
@@ -195,6 +197,187 @@ class TestRegisterView:
         )
         user = User.objects.get(email="gym3@example.com")
         assert user.terms_accepted_at is not None
+
+    # ---------------------------------------------------------------------------
+    # Country validation
+    # ---------------------------------------------------------------------------
+
+    def test_trainer_signup_without_country_returns_400(self, api_client):
+        payload = self._payload()
+        payload.pop("country")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_trainer_signup_with_iso_code_returns_400(self, api_client):
+        resp = api_client.post(self.URL, self._payload(country="NG"), format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert (
+            "full country name" in str(resp.data).lower()
+            or "recognised" in str(resp.data).lower()
+        )
+
+    def test_trainer_signup_with_lowercase_iso_returns_400(self, api_client):
+        resp = api_client.post(self.URL, self._payload(country="ng"), format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_trainer_signup_with_nigeria_returns_201(self, api_client):
+        from apps.accounts.models import User
+
+        resp = api_client.post(
+            self.URL, self._payload(country="Nigeria"), format="json"
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        user = User.objects.get(email="new@example.com")
+        assert user.country == "Nigeria"
+
+    def test_trainer_signup_with_lowercase_country_normalised(self, api_client):
+        from apps.accounts.models import User
+
+        resp = api_client.post(
+            self.URL, self._payload(country="nigeria"), format="json"
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        user = User.objects.get(email="new@example.com")
+        assert user.country == "Nigeria"
+
+    def test_gym_signup_without_country_returns_400(self, api_client):
+        payload = self._payload(email="gym99@example.com", role="gym")
+        payload.pop("country")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_client_signup_without_country_returns_400(self, api_client):
+        payload = self._payload(email="client99@example.com", role="client")
+        payload.pop("country")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_login_response_contains_country(self, api_client):
+        resp = api_client.post(
+            self.URL, self._payload(country="Nigeria"), format="json"
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    # ---------------------------------------------------------------------------
+    # unified full_name
+    # ---------------------------------------------------------------------------
+
+    def test_trainer_signup_without_full_name_returns_400(self, api_client):
+        payload = self._payload()
+        payload.pop("full_name")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_gym_signup_with_full_name_saves_on_gym_profile(self, api_client):
+        from apps.profiles.models import GymProfile
+
+        resp = api_client.post(
+            self.URL,
+            self._payload(
+                email="gym88@example.com", role="gym", full_name="Iron House Gym"
+            ),
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        profile = GymProfile.objects.get(user__email="gym88@example.com")
+        assert profile.full_name == "Iron House Gym"
+
+    def test_client_signup_with_full_name_saves_on_client_profile(self, api_client):
+        from apps.profiles.models import ClientProfile
+
+        resp = api_client.post(
+            self.URL,
+            self._payload(
+                email="cli88@example.com", role="client", full_name="Jane Smith"
+            ),
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        profile = ClientProfile.objects.get(user__email="cli88@example.com")
+        assert profile.full_name == "Jane Smith"
+
+    def test_client_signup_without_full_name_returns_400(self, api_client):
+        payload = self._payload(email="cli77@example.com", role="client")
+        payload.pop("full_name")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    # ---------------------------------------------------------------------------
+    # display_name removed
+    # ---------------------------------------------------------------------------
+
+    def test_user_model_has_no_display_name_field(self, api_client):
+        from apps.accounts.models import User
+
+        assert not hasattr(
+            User(), "display_name"
+        ), "User.display_name should be removed"
+
+    def test_trainer_signup_does_not_require_display_name(self, api_client):
+        payload = self._payload()
+        payload.pop("display_name", None)
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    # ---------------------------------------------------------------------------
+    # admin_full_name removed from signup
+    # ---------------------------------------------------------------------------
+
+    def test_gym_signup_without_admin_full_name_returns_201(self, api_client):
+        payload = self._payload(email="gym77@example.com", role="gym")
+        payload.pop("admin_full_name", None)
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    # ---------------------------------------------------------------------------
+    # phone_number and city removed from signup
+    # ---------------------------------------------------------------------------
+
+    def test_trainer_signup_without_phone_number_returns_201(self, api_client):
+        payload = self._payload()
+        payload.pop("phone_number", None)
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    def test_gym_signup_without_city_returns_201(self, api_client):
+        payload = self._payload(email="gym55@example.com", role="gym")
+        payload.pop("city", None)
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    # ---------------------------------------------------------------------------
+    # full_name_display property
+    # ---------------------------------------------------------------------------
+
+    def test_full_name_display_returns_trainer_profile_full_name(self, api_client):
+        from apps.accounts.tests.factories import TrainerFactory
+        from apps.profiles.tests.factories import TrainerProfileFactory
+
+        user = TrainerFactory()
+        TrainerProfileFactory(user=user, full_name="Trainer Name")
+        assert user.full_name_display == "Trainer Name"
+
+    def test_full_name_display_returns_gym_profile_full_name(self, api_client):
+        from apps.accounts.tests.factories import GymFactory
+        from apps.profiles.tests.factories import GymProfileFactory
+
+        user = GymFactory()
+        GymProfileFactory(user=user, full_name="Gym Name")
+        assert user.full_name_display == "Gym Name"
+
+    def test_full_name_display_returns_client_profile_full_name(self, api_client):
+        from apps.accounts.tests.factories import ClientFactory
+        from apps.profiles.tests.factories import ClientProfileFactory
+
+        user = ClientFactory()
+        ClientProfileFactory(user=user, full_name="Client Name")
+        assert user.full_name_display == "Client Name"
+
+    def test_full_name_display_falls_back_to_email_prefix(self, api_client):
+        from apps.accounts.tests.factories import TrainerFactory
+
+        user = TrainerFactory(email="john.doe@example.com")
+        assert user.full_name_display == "john.doe"
 
 
 # ---------------------------------------------------------------------------

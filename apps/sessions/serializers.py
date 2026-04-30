@@ -12,7 +12,7 @@ from apps.sessions.models import Session
 class ClientMiniSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientProfile
-        fields = ["id", "display_name", "username", "profile_photo_url"]
+        fields = ["id", "full_name", "username", "profile_photo_url"]
         read_only_fields = fields
 
 

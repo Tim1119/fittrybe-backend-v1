@@ -338,8 +338,8 @@ def send_gym_trainer_invite_email(user, gym_profile):
     token = gym_trainer_invite_token.make_token(user)
     web_url = f"{settings.FRONTEND_URL}/gym/trainer/setup?uid={uid}&token={token}"
     deep_link = f"{_mobile_url()}gym/trainer/setup?uid={uid}&token={token}"
-    trainer_name = user.display_name or get_user_name(user)
-    gym_name = gym_profile.gym_name
+    trainer_name = user.full_name_display
+    gym_name = gym_profile.full_name
     context = {
         "trainer_name": trainer_name,
         "gym_name": gym_name,

@@ -113,7 +113,7 @@ class ChatroomMember(BaseModel):
         unique_together = ("chatroom", "user")
 
     def __str__(self):
-        return f"{self.user.display_name} in {self.chatroom.name}"
+        return f"{self.user.full_name_display} in {self.chatroom.name}"
 
 
 class Message(BaseModel):
@@ -225,7 +225,7 @@ class DirectMessageThread(BaseModel):
         return self.user_2_unread
 
     def __str__(self):
-        return f"DM: {self.user_1.display_name} ↔ {self.user_2.display_name}"
+        return f"DM: {self.user_1.full_name_display} ↔ {self.user_2.full_name_display}"
 
 
 class DirectMessage(BaseModel):
@@ -254,7 +254,7 @@ class DirectMessage(BaseModel):
         ordering = ["sent_at"]
 
     def __str__(self):
-        return f"DM({self.id}) from {self.sender.display_name}"
+        return f"DM({self.id}) from {self.sender.full_name_display}"
 
 
 def get_or_create_dm_thread(user_a, user_b):

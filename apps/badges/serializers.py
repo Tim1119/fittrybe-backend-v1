@@ -11,7 +11,7 @@ from apps.profiles.models import ClientProfile
 class ClientMiniSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientProfile
-        fields = ["id", "display_name", "username", "profile_photo_url"]
+        fields = ["id", "full_name", "username", "profile_photo_url"]
         read_only_fields = fields
 
 
@@ -57,7 +57,7 @@ class BadgeAssignmentSerializer(serializers.ModelSerializer):
 
     def get_assigned_by_name(self, obj):
         if obj.assigned_by:
-            return obj.assigned_by.display_name or obj.assigned_by.username
+            return obj.assigned_by.full_name_display
         return "System"
 
 

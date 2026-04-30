@@ -89,9 +89,9 @@ class TestTrainerProfileModel:
 
 @pytest.mark.django_db
 class TestGymProfileModel:
-    def test_completion_starts_at_gym_name_and_admin_only(self):
+    def test_completion_starts_at_full_name_only(self):
         profile = GymProfileFactory()
-        # gym_name(15) + admin_full_name(10) = 25
+        # full_name(25) = 25
         assert profile.profile_completion_percentage == 25
 
     def test_completion_includes_availability_points(self):
@@ -169,7 +169,7 @@ class TestGymTrainerModel:
 
     def test_str(self):
         gt = GymTrainerFactory()
-        assert gt.gym.gym_name in str(gt)
+        assert gt.gym.full_name in str(gt)
         assert gt.trainer.full_name in str(gt)
 
 
@@ -181,12 +181,12 @@ class TestClientProfileModel:
         assert profile.username.startswith(local)
 
     def test_completion_zero_when_empty(self):
-        profile = ClientProfileFactory(display_name="", profile_photo_url="")
+        profile = ClientProfileFactory(full_name="", profile_photo_url="")
         assert profile.profile_completion_percentage == 0
 
     def test_completion_100_when_all_filled(self):
         profile = ClientProfileFactory(
-            display_name="Joe",
+            full_name="Joe",
             profile_photo_url="http://example.com/p.jpg",
         )
         assert profile.profile_completion_percentage == 100

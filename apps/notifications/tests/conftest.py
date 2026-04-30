@@ -10,12 +10,11 @@ from rest_framework_simplejwt.tokens import AccessToken
 User = get_user_model()
 
 
-def make_user(role, email, display_name="Test User", **kwargs):
+def make_user(role, email, **kwargs):
     return User.objects.create_user(
         email=email,
         password="Test1234!",
         role=role,
-        display_name=display_name,
         is_email_verified=True,
         is_active=True,
         **kwargs,
@@ -31,7 +30,7 @@ def auth_client(user):
 
 @pytest.fixture
 def trainer_user(db):
-    return make_user("trainer", "trainer@notif.test", "Trainer One")
+    return make_user("trainer", "trainer@notif.test")
 
 
 @pytest.fixture
@@ -41,7 +40,7 @@ def trainer_client(trainer_user):
 
 @pytest.fixture
 def other_user(db):
-    return make_user("client", "other@notif.test", "Other User")
+    return make_user("client", "other@notif.test")
 
 
 @pytest.fixture

@@ -21,12 +21,11 @@ User = get_user_model()
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-async def _make_user(role, email, display_name="User"):
+async def _make_user(role, email):
     return await sync_to_async(User.objects.create_user)(
         email=email,
         password="Test1234!",
         role=role,
-        display_name=display_name,
         is_email_verified=True,
         is_active=True,
     )
@@ -38,16 +37,16 @@ async def _make_user(role, email, display_name="User"):
 
 
 async def test_chat_message_creates_notifications_for_members():
-    trainer_user = await _make_user("trainer", "trainer@integ.test", "Trainer")
+    trainer_user = await _make_user("trainer", "trainer@integ.test")
     trainer_profile = await sync_to_async(TrainerProfile.objects.create)(
         user=trainer_user,
         full_name="Trainer",
         is_published=True,
         trainer_type="independent",
     )
-    client_user = await _make_user("client", "client@integ.test", "Client")
+    client_user = await _make_user("client", "client@integ.test")
     client_profile = await sync_to_async(ClientProfile.objects.create)(
-        user=client_user, display_name="Client"
+        user=client_user, full_name="Client"
     )
     await sync_to_async(ClientMembership.objects.create)(
         client=client_profile, trainer=trainer_profile, status="active"
@@ -83,16 +82,16 @@ async def test_chat_message_creates_notifications_for_members():
 
 
 async def test_chat_message_push_delay_called_with_correct_args():
-    trainer_user = await _make_user("trainer", "trainer2@integ.test", "Trainer2")
+    trainer_user = await _make_user("trainer", "trainer2@integ.test")
     trainer_profile = await sync_to_async(TrainerProfile.objects.create)(
         user=trainer_user,
         full_name="Trainer2",
         is_published=True,
         trainer_type="independent",
     )
-    client_user = await _make_user("client", "client2@integ.test", "Client2")
+    client_user = await _make_user("client", "client2@integ.test")
     client_profile = await sync_to_async(ClientProfile.objects.create)(
-        user=client_user, display_name="Client2"
+        user=client_user, full_name="Client2"
     )
     await sync_to_async(ClientMembership.objects.create)(
         client=client_profile, trainer=trainer_profile, status="active"
@@ -127,16 +126,16 @@ async def test_chat_message_push_delay_called_with_correct_args():
 
 
 async def test_dm_creates_notification_for_recipient():
-    trainer_user = await _make_user("trainer", "trainer3@integ.test", "Trainer3")
+    trainer_user = await _make_user("trainer", "trainer3@integ.test")
     trainer_profile = await sync_to_async(TrainerProfile.objects.create)(
         user=trainer_user,
         full_name="Trainer3",
         is_published=True,
         trainer_type="independent",
     )
-    client_user = await _make_user("client", "client3@integ.test", "Client3")
+    client_user = await _make_user("client", "client3@integ.test")
     client_profile = await sync_to_async(ClientProfile.objects.create)(
-        user=client_user, display_name="Client3"
+        user=client_user, full_name="Client3"
     )
     await sync_to_async(ClientMembership.objects.create)(
         client=client_profile, trainer=trainer_profile, status="active"
@@ -172,16 +171,16 @@ async def test_dm_creates_notification_for_recipient():
 
 
 async def test_dm_push_delay_called_with_recipient_id():
-    trainer_user = await _make_user("trainer", "trainer4@integ.test", "Trainer4")
+    trainer_user = await _make_user("trainer", "trainer4@integ.test")
     trainer_profile = await sync_to_async(TrainerProfile.objects.create)(
         user=trainer_user,
         full_name="Trainer4",
         is_published=True,
         trainer_type="independent",
     )
-    client_user = await _make_user("client", "client4@integ.test", "Client4")
+    client_user = await _make_user("client", "client4@integ.test")
     client_profile = await sync_to_async(ClientProfile.objects.create)(
-        user=client_user, display_name="Client4"
+        user=client_user, full_name="Client4"
     )
     await sync_to_async(ClientMembership.objects.create)(
         client=client_profile, trainer=trainer_profile, status="active"

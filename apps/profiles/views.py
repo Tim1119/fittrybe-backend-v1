@@ -115,8 +115,7 @@ Update basic profile information. Required for both trainers and gyms.
 - `phone_number` (string, optional) — contact number
 
 **Gym fields:**
-- `gym_name` (string, required) — name of the gym
-- `admin_full_name` (string, required) — full name of gym admin
+- `full_name` (string, required) — name of the gym
 - `about` (string, max 500 chars) — about the gym
 - `location` (string) — address or area
 - `city` (string) — city where gym is located
@@ -139,7 +138,7 @@ Step 1 only handles text fields.
         fields={
             "full_name": drf_serializers.CharField(
                 required=False,
-                help_text="TRAINER ONLY — Display name on profile",
+                help_text="TRAINER + GYM — Display name on profile / gym name",
             ),
             "bio": drf_serializers.CharField(
                 required=False,
@@ -156,14 +155,6 @@ Step 1 only handles text fields.
             "phone_number": drf_serializers.CharField(
                 required=False,
                 help_text="TRAINER ONLY — Contact number",
-            ),
-            "gym_name": drf_serializers.CharField(
-                required=False,
-                help_text="GYM ONLY — Name of the gym",
-            ),
-            "admin_full_name": drf_serializers.CharField(
-                required=False,
-                help_text="GYM ONLY — Full name of gym admin",
             ),
             "about": drf_serializers.CharField(
                 required=False,
@@ -189,7 +180,7 @@ Step 1 only handles text fields.
             fields={
                 "id": drf_serializers.IntegerField(),
                 "full_name": drf_serializers.CharField(
-                    help_text="Trainer: full_name | Gym: gym_name"
+                    help_text="Trainer: full_name | Gym: full_name"
                 ),
                 "slug": drf_serializers.CharField(),
                 "bio": drf_serializers.CharField(help_text="Trainer: bio | Gym: about"),
@@ -680,13 +671,13 @@ Returns the full profile for the currently authenticated user.
 `avg_rating`, `wizard_step`, `wizard_completed`, `profile_completion_percentage`.
 
 **Gym** — returns `GymProfileSerializer` fields:
-`gym_name`, `admin_full_name`, `about`, `location`, `city`,
+`full_name`, `about`, `location`, `city`,
 `contact_phone`, `business_email`, `logo_url`, `cover_photo_url`,
 `availability`, `services`, `is_published`, `avg_rating`,
 `wizard_step`, `wizard_completed`, `profile_completion_percentage`.
 
 **Client** — returns `ClientProfileSerializer` fields:
-`display_name`, `username`, `profile_photo_url`,
+`full_name`, `username`, `profile_photo_url`,
 `profile_completion_percentage`.
         """,
         responses={
@@ -720,11 +711,11 @@ Partially update the current user's profile. All fields are optional.
 `phone_number`, `years_experience`, `pricing_range`,
 `profile_photo_url`, `cover_photo_url`, `trainer_type`.
 
-**Gym** — writable fields: `gym_name`, `admin_full_name`, `about`,
+**Gym** — writable fields: `full_name`, `about`,
 `location`, `city`, `contact_phone`, `business_email`,
 `logo_url`, `cover_photo_url`.
 
-**Client** — writable fields: `display_name`, `profile_photo_url`.
+**Client** — writable fields: `full_name`, `profile_photo_url`.
 
 Nested relations (`specialisations`, `certifications`,
 `availability`, `services`) are managed via the wizard endpoints.
@@ -756,14 +747,6 @@ Nested relations (`specialisations`, `certifications`,
                     required=False,
                     help_text='TRAINER — e.g. "From ₦15,000/session"',
                 ),
-                "gym_name": drf_serializers.CharField(
-                    required=False,
-                    help_text="GYM — name of the gym",
-                ),
-                "admin_full_name": drf_serializers.CharField(
-                    required=False,
-                    help_text="GYM — full name of gym admin",
-                ),
                 "about": drf_serializers.CharField(
                     required=False,
                     help_text="GYM — about the gym, max 500 chars",
@@ -779,10 +762,6 @@ Nested relations (`specialisations`, `certifications`,
                 "business_email": drf_serializers.EmailField(
                     required=False,
                     help_text="GYM — business email address",
-                ),
-                "display_name": drf_serializers.CharField(
-                    required=False,
-                    help_text="CLIENT — public display name",
                 ),
             },
         ),
@@ -867,7 +846,7 @@ Returns 404 if the profile does not exist or has not been published yet.
 **Excluded from public view:** `contact_phone`, `business_email`
 (contact via platform only).
 
-**Included:** `gym_name`, `slug`, `about`, `location`, `city`,
+**Included:** `full_name`, `slug`, `about`, `location`, `city`,
 `logo_url`, `cover_photo_url`, `avg_rating`, `rating_count`,
 `availability`, `services`, `profile_completion_percentage`, `public_url`.
     """,
@@ -981,7 +960,7 @@ class ProfileSearchView(APIView):
         if profile_type == "gym":
             qs = GymProfile.objects.filter(is_published=True).select_related("user")
             if q:
-                qs = qs.filter(Q(gym_name__icontains=q) | Q(about__icontains=q))
+                qs = qs.filter(Q(full_name__icontains=q) | Q(about__icontains=q))
             if location:
                 qs = qs.filter(location__icontains=location)
             if session_type:
@@ -1799,7 +1778,7 @@ class PublicGymProfileHTMLView(View):
                 "availability": profile.availability.all(),
                 "services": profile.services.all(),
                 "page_url": request.build_absolute_uri(),
-                "og_title": f"{profile.gym_name} — Gym on Fit Trybe",
+                "og_title": f"{profile.full_name} — Gym on Fit Trybe",
                 "og_description": about_excerpt,
                 "og_image": profile.logo_url or _DEFAULT_OG_IMAGE,
                 "app_store_url": settings.APP_STORE_URL,
@@ -1817,7 +1796,7 @@ def _recalculate_rating(profile):
     """Recalculate avg_rating and rating_count after any review change."""
     from django.db.models import Avg, Count
 
-    is_trainer = hasattr(profile, "full_name")
+    is_trainer = isinstance(profile, TrainerProfile)
     filter_kwargs = {"trainer": profile} if is_trainer else {"gym": profile}
     agg = Review.objects.filter(deleted_at__isnull=True, **filter_kwargs).aggregate(
         avg=Avg("rating"), count=Count("id")
@@ -2326,7 +2305,6 @@ class GymTrainerCreateListView(APIView):
                 email=email,
                 role=User.Role.TRAINER,
                 is_email_verified=True,
-                display_name=full_name,
             )
             trainer_user.set_unusable_password()
             trainer_user.save()

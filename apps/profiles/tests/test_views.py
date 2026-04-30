@@ -71,8 +71,7 @@ class TestWizardStep1View:
         profile = GymProfileFactory()
         client = _auth_client(profile.user)
         payload = {
-            "gym_name": "Fit Zone",
-            "admin_full_name": "Jane Admin",
+            "full_name": "Fit Zone",
             "about": "Best gym in town",
             "location": "Abuja",
             "city": "Abuja",
@@ -82,7 +81,7 @@ class TestWizardStep1View:
         resp = client.put(self.URL, payload, format="json")
         assert resp.status_code == status.HTTP_200_OK
         profile.refresh_from_db()
-        assert profile.gym_name == "Fit Zone"
+        assert profile.full_name == "Fit Zone"
         assert profile.wizard_step == 1
 
     def test_step1_requires_authentication(self):
@@ -363,7 +362,7 @@ class TestMyProfileView:
         client = _auth_client(profile.user)
         resp = client.get(self.URL)
         assert resp.status_code == status.HTTP_200_OK
-        assert resp.data["data"]["gym_name"] == profile.gym_name
+        assert resp.data["data"]["full_name"] == profile.full_name
 
     def test_get_returns_client_profile(self):
         profile = ClientProfileFactory()
@@ -427,7 +426,7 @@ class TestPublicGymProfileView:
         profile = PublishedGymProfileFactory()
         resp = APIClient().get(f"/api/v1/profiles/gym/{profile.slug}/")
         assert resp.status_code == status.HTTP_200_OK
-        assert resp.data["data"]["gym_name"] == profile.gym_name
+        assert resp.data["data"]["full_name"] == profile.full_name
 
 
 @pytest.mark.django_db
@@ -881,3 +880,43 @@ class TestProfileAvailabilityEndpoints:
         resp = client.post(self.LIST_URL, self._av_payload(), format="json")
         assert resp.status_code == status.HTTP_201_CREATED
         assert profile.availability.filter(day_of_week="monday").exists()
+
+
+# ---------------------------------------------------------------------------
+# gym_name renamed to full_name + admin_full_name removed
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestGymProfileFullNameRename:
+    PUBLIC_URL = "/api/v1/profiles/gym/{slug}/"
+
+    def test_public_gym_profile_contains_full_name_not_gym_name(self):
+        profile = PublishedGymProfileFactory(full_name="Iron Gym")
+        url = self.PUBLIC_URL.format(slug=profile.slug)
+        client = APIClient()
+        resp = client.get(url)
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.data["data"]
+        assert "full_name" in data
+        assert data["full_name"] == "Iron Gym"
+        assert "gym_name" not in data
+
+    def test_public_gym_profile_no_admin_full_name_field(self):
+        profile = PublishedGymProfileFactory()
+        url = self.PUBLIC_URL.format(slug=profile.slug)
+        client = APIClient()
+        resp = client.get(url)
+        assert resp.status_code == status.HTTP_200_OK
+        assert "admin_full_name" not in resp.data["data"]
+
+    def test_gym_search_by_full_name_works(self):
+        PublishedGymProfileFactory(full_name="Power House")
+        client = APIClient()
+        resp = client.get(
+            "/api/v1/profiles/search/", {"type": "gym", "q": "Power House"}
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        results = resp.data["data"]
+        assert len(results) >= 1
+        assert results[0]["full_name"] == "Power House"
