@@ -325,6 +325,8 @@ AXES_COOLOFF_TIME = 0.25  # 15 minutes
 AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 AXES_RESET_ON_SUCCESS = True
 AXES_LOCKOUT_CALLABLE = "apps.accounts.utils.axes_lockout_response"
+AXES_USERNAME_FORM_FIELD = "email"
+
 
 # ---------------------------------------------------------------------------
 # Rate limiting

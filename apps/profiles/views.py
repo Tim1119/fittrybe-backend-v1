@@ -1188,11 +1188,12 @@ class SpecialisationListView(APIView):
 
 
 @extend_schema(
-    summary="Attach specialisations to my profile",
+    summary="Get or attach specialisations on my profile",
     description="""
-Attach specialisations to the authenticated trainer's profile.
-(Additive — existing specialisations are kept.)
+GET — returns specialisations currently attached to the authenticated trainer's profile.
+Returns an empty list for gym accounts.
 
+POST — attaches specialisations to the authenticated trainer's profile (additive).
 Maximum 10 total specialisations.
 
 - `specialisation_ids` — IDs from `GET /api/v1/profiles/specialisations/`
@@ -1223,6 +1224,25 @@ After the first attachment, if the trainer has not yet completed onboarding,
 )
 class ProfileSpecialisationView(APIView):
     permission_classes = [IsAuthenticated, IsTrainerOrGym]
+
+    def get(self, request):
+        user = request.user
+        if user.role == "trainer":
+            profile = _get_trainer_profile(user)
+            if not profile:
+                return _profile_not_found()
+            return APIResponse.success(
+                data=SpecialisationSerializer(
+                    profile.specialisations.all(), many=True
+                ).data,
+                message="Specialisations retrieved.",
+            )
+        else:
+            # Gyms do not have specialisations
+            return APIResponse.success(
+                data=[],
+                message="Specialisations retrieved.",
+            )
 
     def post(self, request):
         user = request.user
@@ -1844,6 +1864,19 @@ def _build_rating_distribution(reviews_qs):
         "POST — requires authentication. Only clients with an active membership "
         "with this trainer may submit a review. One review per client per trainer."
     ),
+    request=inline_serializer(
+        name="ReviewSubmitRequest",
+        fields={
+            "rating": drf_serializers.IntegerField(
+                min_value=1,
+                max_value=5,
+                help_text="Rating from 1 to 5",
+            ),
+            "content": drf_serializers.CharField(
+                help_text="Written review text",
+            ),
+        },
+    ),
     responses={
         200: OpenApiResponse(description="Paginated reviews with summary"),
         201: OpenApiResponse(description="Review created"),
@@ -2030,6 +2063,19 @@ class TrainerReviewRespondView(APIView):
         "with summary stats (avg_rating, total_reviews, rating_distribution).\n\n"
         "POST — requires authentication. Only clients with an active membership "
         "with this gym may submit a review. One review per client per gym."
+    ),
+    request=inline_serializer(
+        name="GymReviewSubmitRequest",
+        fields={
+            "rating": drf_serializers.IntegerField(
+                min_value=1,
+                max_value=5,
+                help_text="Rating from 1 to 5",
+            ),
+            "content": drf_serializers.CharField(
+                help_text="Written review text",
+            ),
+        },
     ),
     responses={
         200: OpenApiResponse(description="Paginated reviews with summary"),
@@ -2508,6 +2554,12 @@ class GymTrainerAcceptView(APIView):
     tags=["Profiles"],
     summary="Toggle profile visibility",
     description="Set is_published true or false for the authenticated trainer or gym.",
+    request=inline_serializer(
+        name="ProfileVisibilityRequest",
+        fields={
+            "is_published": drf_serializers.BooleanField(),
+        },
+    ),
     responses={
         200: OpenApiResponse(description="Visibility updated"),
         400: OpenApiResponse(description="is_published field missing"),
