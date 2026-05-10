@@ -72,3 +72,12 @@ LOGGING = {
         "apps": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
+
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = env("EMAIL_PRODUCTION_HOST", default="smtp.mailtrap.live")
+EMAIL_HOST_USER = env("EMAIL_PRODUCTION_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_PRODUCTION_HOST_PASSWORD", default="")
+EMAIL_PORT = env.int("EMAIL_PRODUCTION_PORT", default=587)
+EMAIL_USE_TLS = env.bool("EMAIL_PRODUCTION_USE_TLS", default=True)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@fittrybe.com")
