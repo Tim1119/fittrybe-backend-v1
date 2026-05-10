@@ -74,13 +74,11 @@ LOGGING = {
 }
 
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = env("EMAIL_PRODUCTION_HOST", default="smtp.mailtrap.live")
-EMAIL_HOST_USER = env("EMAIL_PRODUCTION_HOST_USER", default="")
-EMAIL_HOST_PASSWORD = env("EMAIL_PRODUCTION_HOST_PASSWORD", default="")
-EMAIL_PORT = env.int("EMAIL_PRODUCTION_PORT", default=587)
-EMAIL_USE_TLS = env.bool("EMAIL_PRODUCTION_USE_TLS", default=True)
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@fittrybe.com")
+EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+ANYMAIL = {
+    "RESEND_API_KEY": env("RESEND_API_KEY", default=""),
+}
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@api.fittrybe.com")
 
 
 RATELIMIT_IP_META_KEY = "HTTP_X_FORWARDED_FOR"
