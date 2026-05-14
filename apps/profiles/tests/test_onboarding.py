@@ -34,17 +34,34 @@ def api_client():
 
 @pytest.mark.django_db
 class TestGoalListView:
+    _GOAL_NAMES = [
+        "Build Muscle",
+        "Lose Weight",
+        "Core Strength",
+        "Improve Fitness",
+        "Feel Healthier",
+        "Stay Consistent",
+    ]
+
+    def _seed_goals(self):
+        from apps.profiles.models import Goal
+
+        for name in self._GOAL_NAMES:
+            Goal.objects.get_or_create(name=name, defaults={"is_predefined": True})
+
     def test_returns_predefined_goals(self, api_client):
+        self._seed_goals()
         resp = api_client.get(GOALS_LIST_URL)
         assert resp.status_code == 200
         data = resp.data["data"]
-        assert len(data) == 6  # seeded in migration
+        assert len(data) == 6
 
     def test_no_auth_required(self, api_client):
         resp = api_client.get(GOALS_LIST_URL)
         assert resp.status_code == 200
 
     def test_response_has_expected_fields(self, api_client):
+        self._seed_goals()
         resp = api_client.get(GOALS_LIST_URL)
         assert resp.status_code == 200
         first = resp.data["data"][0]

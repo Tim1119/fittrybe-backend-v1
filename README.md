@@ -224,11 +224,14 @@ make beat
 
 ## Seed Test Data
 
-Setup order (fresh install):
-1. python manage.py migrate           — creates tables and seeds reference data via migrations
-2. python manage.py seed_app_data     — ensures all reference data is correct and up to date
-3. python manage.py createsuperuser   — create your admin account
-4. python manage.py seed_test_data    — optional, adds test users for development
+Fresh install setup order:
+1. python manage.py migrate              — creates all database tables
+2. python manage.py seed_app_data        — seeds required reference data (specialisations, goals, badges, plans) — REQUIRED before starting the server
+3. python manage.py createsuperuser      — create your admin account
+4. python manage.py seed_test_data       — optional, adds test users for development
+5. python manage.py runserver            — start the server
+
+NOTE: If you start the server without running seed_app_data you will see an ImproperlyConfigured error with instructions. Just run seed_app_data and restart.
 
 ```bash
 # Seed fresh data

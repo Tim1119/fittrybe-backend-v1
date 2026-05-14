@@ -8,26 +8,18 @@ Usage:
 from django.core.management.base import BaseCommand
 
 SPECIALISATIONS = [
-    "Weight Loss",
-    "Muscle Building",
+    "Strength",
     "HIIT",
-    "Strength Training",
     "Yoga",
     "Pilates",
-    "Nutrition Coaching",
-    "Rehabilitation",
-    "Boxing",
-    "Dance Fitness",
-    "Cardio",
     "CrossFit",
+    "Nutrition",
+    "Boxing",
+    "Dance",
     "Calisthenics",
-    "Powerlifting",
-    "Bodybuilding",
-    "Mobility & Flexibility",
-    "Pre/Postnatal Fitness",
-    "Senior Fitness",
-    "Sports Performance",
-    "Functional Training",
+    "Recovery",
+    "Mobility",
+    "Running",
 ]
 
 GOALS = [

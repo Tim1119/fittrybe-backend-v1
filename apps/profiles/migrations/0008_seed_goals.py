@@ -1,23 +1,6 @@
+# Gutted: seeding moved to python manage.py seed_app_data
+
 from django.db import migrations
-
-GOALS = [
-    "Build Muscle",
-    "Lose Weight",
-    "Core Strength",
-    "Improve Fitness",
-    "Feel Healthier",
-    "Stay Consistent",
-]
-
-
-def seed_goals(apps, schema_editor):
-    Goal = apps.get_model("profiles", "Goal")
-    for name in GOALS:
-        Goal.objects.get_or_create(name=name, defaults={"is_predefined": True})
-
-
-def reverse_goals(apps, schema_editor):
-    pass
 
 
 class Migration(migrations.Migration):
@@ -27,5 +10,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(seed_goals, reverse_goals),
+        migrations.RunPython(
+            migrations.RunPython.noop,
+            migrations.RunPython.noop,
+        ),
     ]
