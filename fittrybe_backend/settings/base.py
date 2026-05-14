@@ -336,6 +336,7 @@ RATELIMIT_ENABLE = True
 # ---------------------------------------------------------------------------
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
 MOBILE_URL = env("MOBILE_URL", default="fittrybe://")
+API_BASE_URL = env("API_BASE_URL", default="http://localhost:8000")
 
 # ---------------------------------------------------------------------------
 # Payment gateways
