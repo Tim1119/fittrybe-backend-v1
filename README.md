@@ -40,7 +40,7 @@ Django 5.2 + DRF + PostgreSQL + Redis + Celery + Django Channels
 | Real-time | Django Channels + WebSockets |
 | Auth | JWT (SimpleJWT) |
 | Payments | Paystack + Stripe |
-| Email | Mailtrap (development) |
+| Email | Resend |
 | API Docs | Swagger / OpenAPI (drf-spectacular) |
 
 ---
@@ -144,14 +144,9 @@ REDIS_URL=redis://localhost:6379/0
 FRONTEND_URL=http://localhost:3000
 MOBILE_URL=fittrybe://
 
-# Email — Mailtrap (development)
-# Sign up free at https://mailtrap.io → Email Testing → SMTP Settings
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=sandbox.smtp.mailtrap.io
-EMAIL_HOST_USER=your-mailtrap-username
-EMAIL_HOST_PASSWORD=your-mailtrap-password
-EMAIL_PORT=2525
-EMAIL_USE_TLS=True
+# Email — Resend (production)
+# Sign up free at https://resend.com then create an API key
+RESEND_API_KEY=re_your_api_key_here
 DEFAULT_FROM_EMAIL=noreply@fittrybe.com
 
 # Paystack (Nigerian payments)
@@ -178,13 +173,13 @@ PLAY_STORE_URL=#
 | Variable | Where to get it |
 |----------|----------------|
 | `SECRET_KEY` | Generate with: `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
-| `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | Mailtrap → Email Testing → your inbox → SMTP Settings |
+| `RESEND_API_KEY` | Resend Dashboard → API Keys → Create API Key |
 | `PAYSTACK_SECRET_KEY` | Paystack Dashboard → Settings → API Keys & Webhooks |
 | `STRIPE_SECRET_KEY` | Stripe Dashboard → Developers → API Keys |
 | `APPLE_TEAM_ID` | Ask mobile team (Godwin) |
 | `ANDROID_SHA256_FINGERPRINT` | Ask mobile team (Godwin) |
 
-> **Note:** For development, Paystack and Stripe keys are optional unless you are testing payments. Email requires Mailtrap — all emails are captured there during development and never sent to real inboxes.
+> **Note:** For development, Paystack and Stripe keys are optional unless you are testing payments. Email is sent via Resend — sign up free and create an API key.
 
 ---
 
@@ -229,14 +224,20 @@ make beat
 
 ## Seed Test Data
 
-Load sample data for development and testing:
+Setup order (fresh install):
+1. python manage.py migrate           — creates tables and seeds reference data via migrations
+2. python manage.py seed_app_data     — ensures all reference data is correct and up to date
+3. python manage.py createsuperuser   — create your admin account
+4. python manage.py seed_test_data    — optional, adds test users for development
 
 ```bash
 # Seed fresh data
+python manage.py seed_app_data
 python manage.py seed_test_data
 
-# Wipe existing data and re-seed
+# Wipe existing test users and re-seed
 python manage.py seed_test_data --clear
+python manage.py seed_test_data
 ```
 
 This creates:
@@ -452,14 +453,13 @@ Trainers and gyms must have an active subscription to access protected endpoints
 
 Clients are always free and skip the subscription gate.
 
-### Email in Development
+### Email
 
-All emails go to **Mailtrap** — they are never sent to real inboxes.
+All emails are sent via **Resend**.
 
-1. Sign up at https://mailtrap.io (free)
-2. Go to Email Testing → your inbox
-3. Click SMTP Settings → copy credentials to `.env`
-4. All emails sent by the app appear in your Mailtrap inbox
+1. Sign up at https://resend.com (free tier available)
+2. Create an API key in the Resend dashboard
+3. Copy the key to `RESEND_API_KEY` in `.env`
 
 ---
 
@@ -483,7 +483,7 @@ make migrate        # Run migrations
 |----------|-----|
 | Backend Org Repo | https://github.com/Fit-Trybe/fittrybe-backend-v1 |
 | API Docs (local) | http://127.0.0.1:8000/api/docs/ |
-| Mailtrap | https://mailtrap.io |
+| Resend | https://resend.com |
 | Paystack Dashboard | https://dashboard.paystack.com |
 | Stripe Dashboard | https://dashboard.stripe.com |
 | Technical Docs (Notion) | https://www.notion.so/32bcdf3cc8bc8153b05cf7a9c0513b97 |

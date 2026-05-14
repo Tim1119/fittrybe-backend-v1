@@ -1,7 +1,7 @@
 """
-Management command to seed test data for development/testing.
+Management command to seed TEST USERS for development.
+Run python manage.py seed_app_data first to seed reference data.
 NEVER run in production.
-
 Usage:
     python manage.py seed_test_data
     python manage.py seed_test_data --clear
@@ -14,7 +14,6 @@ from django.db import transaction
 from django.utils import timezone
 
 NIGERIAN_CITIES = ["Lagos", "Abuja", "Port Harcourt", "Kano", "Ibadan"]
-SPECIALISATIONS = ["Weight Loss", "Muscle Building", "HIIT", "Yoga", "Boxing"]
 BIOS = [
     "Certified personal trainer with 5+ years experience.",
     "Helping clients achieve their fitness goals since 2019.",
@@ -74,6 +73,17 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        from apps.profiles.models import Specialisation
+
+        if not Specialisation.objects.filter(is_predefined=True).exists():
+            self.stdout.write(
+                self.style.ERROR(
+                    "No specialisations found. "
+                    "Run python manage.py seed_app_data first."
+                )
+            )
+            return
+
         if options["clear"]:
             self.clear_seed_data()
 
@@ -128,6 +138,10 @@ class Command(BaseCommand):
                     "  Indie Trainer 1: chidi.nwosu@fittrybe.com\n"
                     "  Indie Trainer 2: kemi.adeleke@fittrybe.com\n"
                     "  Clients: client01@fittrybe.com ... client24@fittrybe.com\n"
+                    "\nRun order for fresh setup:\n"
+                    "  1. python manage.py migrate\n"
+                    "  2. python manage.py seed_app_data\n"
+                    "  3. python manage.py seed_test_data\n"
                 )
             )
 
@@ -145,6 +159,7 @@ class Command(BaseCommand):
             is_email_verified=True,
             is_active=True,
             onboarding_status="completed",
+            onboarding_step=2,
         )
 
         profile = GymProfile.objects.create(
@@ -156,8 +171,7 @@ class Command(BaseCommand):
             contact_phone=f"080{random.randint(10000000, 99999999)}",
             business_email=email,
             is_published=True,
-            wizard_step=4,
-            wizard_completed=True,
+            offers_products=True,
         )
 
         for day in ["monday", "wednesday", "friday"]:
@@ -221,6 +235,7 @@ class Command(BaseCommand):
             is_email_verified=True,
             is_active=True,
             onboarding_status="completed",
+            onboarding_step=2,
         )
 
         profile = TrainerProfile.objects.create(
@@ -233,14 +248,13 @@ class Command(BaseCommand):
             trainer_type=trainer_type,
             gym=gym,
             is_published=True,
-            wizard_step=4,
-            wizard_completed=True,
+            offers_products=True,
         )
 
-        specs = Specialisation.objects.filter(
-            name__in=random.sample(SPECIALISATIONS, 2)
-        )
-        profile.specialisations.set(specs)
+        all_specs = list(Specialisation.objects.filter(is_predefined=True))
+        if all_specs:
+            specs = random.sample(all_specs, min(3, len(all_specs)))
+            profile.specialisations.set(specs)
 
         for day in ["tuesday", "thursday", "saturday"]:
             Availability.objects.create(
@@ -321,6 +335,18 @@ class Command(BaseCommand):
             user=user,
             full_name=display_name,
         )
+
+        from apps.profiles.models import Goal
+        from apps.profiles.models import Specialisation as Spec
+
+        all_goals = list(Goal.objects.filter(is_predefined=True))
+        if all_goals:
+            goals = random.sample(all_goals, min(2, len(all_goals)))
+            profile.primary_goals.set(goals)
+        all_specs = list(Spec.objects.filter(is_predefined=True))
+        if all_specs:
+            focus = random.sample(all_specs, min(3, len(all_specs)))
+            profile.specialisations.set(focus)
 
         return profile
 
