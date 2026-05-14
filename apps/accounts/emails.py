@@ -43,7 +43,10 @@ def _mobile_url():
 def send_verification_email(user):
     token = account_token_generator.make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))
-    web_url = f"{settings.FRONTEND_URL}/verify-email/?uid={uid}&token={token}"
+    # web_url = f"{settings.FRONTEND_URL}/verify-email/?uid={uid}&token={token}"
+    web_url = (
+        f"{settings.API_BASE_URL}/api/v1/auth/verify-email/?uid={uid}&token={token}"
+    )
     mobile_url = f"{_mobile_url()}verify-email?uid={uid}&token={token}"
     context = {
         "user": user,
@@ -51,7 +54,7 @@ def send_verification_email(user):
         "user_role": user.role,
         "web_url": web_url,
         "mobile_url": mobile_url,
-        "frontend_url": settings.FRONTEND_URL,
+        "frontend_url": settings.API_BASE_URL,
         "logo_url": _logo_url(),
         # legacy — kept so existing template refs still render
         "verification_url": web_url,
