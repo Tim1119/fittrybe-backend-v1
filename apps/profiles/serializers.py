@@ -9,6 +9,7 @@ from apps.profiles.models import (
     Availability,
     Certification,
     ClientProfile,
+    Goal,
     GymProfile,
     GymTrainer,
     Review,
@@ -80,6 +81,7 @@ class TrainerProfileSerializer(serializers.ModelSerializer):
     services = ServiceSerializer(many=True, read_only=True)
     profile_completion_percentage = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
+    offers_products = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = TrainerProfile
@@ -98,6 +100,7 @@ class TrainerProfileSerializer(serializers.ModelSerializer):
             "is_published",
             "avg_rating",
             "rating_count",
+            "offers_products",
             "specialisations",
             "certifications",
             "availability",
@@ -174,6 +177,7 @@ class GymProfileSerializer(serializers.ModelSerializer):
     services = ServiceSerializer(many=True, read_only=True)
     profile_completion_percentage = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
+    offers_products = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = GymProfile
@@ -191,6 +195,7 @@ class GymProfileSerializer(serializers.ModelSerializer):
             "is_published",
             "avg_rating",
             "rating_count",
+            "offers_products",
             "availability",
             "services",
             "profile_completion_percentage",
@@ -258,6 +263,8 @@ class GymProfilePublicSerializer(serializers.ModelSerializer):
 
 class ClientProfileSerializer(serializers.ModelSerializer):
     profile_completion_percentage = serializers.SerializerMethodField()
+    specialisations = SpecialisationSerializer(many=True, read_only=True)
+    primary_goals = serializers.SerializerMethodField()
 
     class Meta:
         model = ClientProfile
@@ -267,6 +274,8 @@ class ClientProfileSerializer(serializers.ModelSerializer):
             "username",
             "profile_photo_url",
             "profile_completion_percentage",
+            "specialisations",
+            "primary_goals",
         )
         read_only_fields = ("id", "username")
 
@@ -274,100 +283,23 @@ class ClientProfileSerializer(serializers.ModelSerializer):
     def get_profile_completion_percentage(self, obj):
         return obj.profile_completion_percentage
 
+    @extend_schema_field(serializers.ListField())
+    def get_primary_goals(self, obj):
+        from apps.profiles.serializers import GoalSerializer as _GoalSerializer
+
+        return _GoalSerializer(obj.primary_goals.all(), many=True).data
+
 
 # ---------------------------------------------------------------------------
-# Wizard serializers
+# Goal serializer
 # ---------------------------------------------------------------------------
 
 
-class WizardStep1TrainerSerializer(serializers.ModelSerializer):
+class GoalSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TrainerProfile
-        fields = (
-            "full_name",
-            "bio",
-            "location",
-            "years_experience",
-            "phone_number",
-        )
-
-
-class WizardStep1GymSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = GymProfile
-        fields = (
-            "full_name",
-            "about",
-            "location",
-            "city",
-            "contact_phone",
-            "business_email",
-        )
-
-
-class _CertificationInputSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=200)
-    issuing_body = serializers.CharField(
-        max_length=200, required=False, allow_blank=True, default=""
-    )
-    year_obtained = serializers.IntegerField(required=False, allow_null=True)
-
-
-class _ServiceInputSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=200)
-    description = serializers.CharField(
-        max_length=500, required=False, allow_blank=True, default=""
-    )
-    session_type = serializers.ChoiceField(
-        choices=Service.SessionType.choices,
-        required=False,
-        default=Service.SessionType.BOTH,
-    )
-    display_order = serializers.IntegerField(required=False, default=0, min_value=0)
-
-
-class WizardStep2Serializer(serializers.Serializer):
-    """Trainer step 2: specialisations, certifications, services, pricing."""
-
-    specialisation_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        required=False,
-        default=list,
-    )
-    certifications = _CertificationInputSerializer(many=True, required=False)
-    services = _ServiceInputSerializer(many=True, required=False)
-    pricing_range = serializers.CharField(
-        max_length=200, required=False, allow_blank=True, default=""
-    )
-
-    def validate_specialisation_ids(self, value):
-        if len(value) > 10:
-            raise serializers.ValidationError(
-                "You can select at most 10 specialisations."
-            )
-        return value
-
-
-class WizardStep2GymSerializer(serializers.Serializer):
-    """Gym step 2: services only."""
-
-    services = _ServiceInputSerializer(many=True, required=False)
-
-
-class WizardStep3TrainerSerializer(serializers.Serializer):
-    availability = AvailabilitySerializer(many=True)
-
-    def validate_availability(self, value):
-        days = [item["day_of_week"] for item in value]
-        if len(days) != len(set(days)):
-            raise serializers.ValidationError(
-                "Duplicate days of the week are not allowed."
-            )
-        return value
-
-
-class WizardStep3GymSerializer(WizardStep3TrainerSerializer):
-    """Same structure as trainer, FK set in the view."""
+        model = Goal
+        fields = ["id", "name", "slug", "is_predefined"]
+        read_only_fields = ["id", "slug", "is_predefined"]
 
 
 # ---------------------------------------------------------------------------

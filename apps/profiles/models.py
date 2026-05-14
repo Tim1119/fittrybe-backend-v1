@@ -1,5 +1,5 @@
 """
-Profile models — Specialisation, TrainerProfile, GymProfile,
+Profile models — Specialisation, Goal, TrainerProfile, GymProfile,
 GymTrainer, Availability, Certification, Service, ClientProfile, Review.
 """
 
@@ -22,6 +22,18 @@ class Specialisation(BaseModel):
     class Meta:
         verbose_name = "Specialisation"
         verbose_name_plural = "Specialisations"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Goal(BaseModel):
+    name = models.CharField(max_length=100, unique=True)
+    slug = AutoSlugField(populate_from="name", unique=True)
+    is_predefined = models.BooleanField(default=False)
+
+    class Meta:
         ordering = ["name"]
 
     def __str__(self):
@@ -68,8 +80,7 @@ class TrainerProfile(BaseModel):
         max_digits=3, decimal_places=2, default=Decimal("0.00")
     )
     rating_count = models.PositiveIntegerField(default=0)
-    wizard_step = models.PositiveIntegerField(default=0)
-    wizard_completed = models.BooleanField(default=False)
+    offers_products = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Trainer Profile"
@@ -145,8 +156,7 @@ class GymProfile(BaseModel):
         max_digits=3, decimal_places=2, default=Decimal("0.00")
     )
     rating_count = models.PositiveIntegerField(default=0)
-    wizard_step = models.PositiveIntegerField(default=0)
-    wizard_completed = models.BooleanField(default=False)
+    offers_products = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Gym Profile"
@@ -380,6 +390,10 @@ class ClientProfile(BaseModel):
     )
     profile_photo_url = models.URLField(blank=True)
     tracker_addon_active = models.BooleanField(default=False)
+    specialisations = models.ManyToManyField(
+        "Specialisation", blank=True, related_name="clients"
+    )
+    primary_goals = models.ManyToManyField("Goal", blank=True, related_name="clients")
 
     class Meta:
         verbose_name = "Client Profile"

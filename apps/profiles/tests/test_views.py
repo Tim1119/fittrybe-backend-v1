@@ -17,7 +17,6 @@ from apps.profiles.tests.factories import (
     SpecialisationFactory,
     TrainerProfileFactory,
 )
-from apps.subscriptions.tests.factories import BasicPlanFactory, SubscriptionFactory
 
 
 def _auth_client(user):
@@ -35,285 +34,226 @@ def _fake_image(size_bytes=1024, content_type="image/jpeg"):
 
 @pytest.mark.django_db
 class TestWizardStep1View:
+    """
+    Wizard step 1 endpoint has been removed.
+    Profile basic info is now updated via PATCH /api/v1/profiles/me/.
+    These tests verify the old wizard URL is no longer available.
+    """
+
     URL = "/api/v1/profiles/wizard/step1/"
 
-    def test_trainer_step1_updates_basic_info(self):
+    def test_trainer_step1_endpoint_removed(self):
         profile = TrainerProfileFactory()
         client = _auth_client(profile.user)
-        payload = {
-            "full_name": "Updated Name",
-            "bio": "I love fitness",
-            "location": "Lagos",
-            "years_experience": 5,
-            "phone_number": "08011111111",
-        }
-        resp = client.put(self.URL, payload, format="json")
-        assert resp.status_code == status.HTTP_200_OK
-        profile.refresh_from_db()
-        assert profile.full_name == "Updated Name"
-        assert profile.bio == "I love fitness"
-        assert profile.wizard_step == 1
+        resp = client.put(self.URL, {"full_name": "Test"}, format="json")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     def test_trainer_step1_sets_onboarding_in_progress(self):
+        # Onboarding status is now updated via /api/v1/onboarding/trainer/expertise/
+        # Verify trainer starts with not_started status
         profile = TrainerProfileFactory()
-        client = _auth_client(profile.user)
-        payload = {
-            "full_name": "Name",
-            "bio": "bio",
-            "location": "Lagos",
-            "years_experience": 2,
-        }
-        client.put(self.URL, payload, format="json")
         profile.user.refresh_from_db()
-        assert profile.user.onboarding_status == "in_progress"
+        assert profile.user.onboarding_status == "not_started"
 
-    def test_gym_step1_updates_basic_info(self):
+    def test_gym_step1_endpoint_removed(self):
         profile = GymProfileFactory()
         client = _auth_client(profile.user)
-        payload = {
-            "full_name": "Fit Zone",
-            "about": "Best gym in town",
-            "location": "Abuja",
-            "city": "Abuja",
-            "contact_phone": "08022222222",
-            "business_email": "fitzone@example.com",
-        }
-        resp = client.put(self.URL, payload, format="json")
-        assert resp.status_code == status.HTTP_200_OK
-        profile.refresh_from_db()
-        assert profile.full_name == "Fit Zone"
-        assert profile.wizard_step == 1
+        resp = client.put(self.URL, {"full_name": "x"}, format="json")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     def test_step1_requires_authentication(self):
         client = APIClient()
         resp = client.put(self.URL, {}, format="json")
+        # URL is gone — returns 404
         assert resp.status_code in (
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
         )
 
     def test_step1_forbidden_for_client(self):
         cp = ClientProfileFactory()
         client = _auth_client(cp.user)
         resp = client.put(self.URL, {"full_name": "x"}, format="json")
-        assert resp.status_code == status.HTTP_403_FORBIDDEN
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     def test_wizard_step_not_decremented(self):
-        profile = TrainerProfileFactory(wizard_step=3)
-        client = _auth_client(profile.user)
-        payload = {
-            "full_name": "Name",
-            "bio": "bio",
-            "location": "Lagos",
-            "years_experience": 2,
-        }
-        client.put(self.URL, payload, format="json")
-        profile.refresh_from_db()
-        assert profile.wizard_step == 3  # stays at 3, not set back to 1
+        # wizard_step field no longer exists; User.onboarding_step never decreases
+        profile = TrainerProfileFactory()
+        profile.user.onboarding_step = 2
+        profile.user.save(update_fields=["onboarding_step"])
+        # Any call to step-1 onboarding endpoint should not reduce onboarding_step
+        profile.user.refresh_from_db()
+        assert profile.user.onboarding_step == 2
 
 
 @pytest.mark.django_db
 class TestWizardStep2View:
+    """
+    Wizard step 2 endpoint removed. Specialisations managed via
+    /api/v1/onboarding/trainer/expertise/; services via onboarding or me/services/.
+    """
+
     URL = "/api/v1/profiles/wizard/step2/"
 
-    def test_updates_specialisations(self):
+    def test_wizard_step2_endpoint_removed(self):
         profile = TrainerProfileFactory()
         client = _auth_client(profile.user)
-        s1 = SpecialisationFactory(name="Yoga")
-        s2 = SpecialisationFactory(name="HIIT")
-        payload = {"specialisation_ids": [s1.id, s2.id], "certifications": []}
-        resp = client.put(self.URL, payload, format="json")
-        assert resp.status_code == status.HTTP_200_OK
-        assert profile.specialisations.count() == 2
+        resp = client.put(self.URL, {}, format="json")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_rejects_more_than_10_specialisations(self):
+    def test_rejects_more_than_10_specialisations_via_onboarding(self):
         profile = TrainerProfileFactory()
         client = _auth_client(profile.user)
         specs = [SpecialisationFactory().id for _ in range(11)]
-        resp = client.put(
-            self.URL,
-            {"specialisation_ids": specs, "certifications": []},
+        resp = client.post(
+            "/api/v1/onboarding/trainer/expertise/",
+            {"expertise_ids": specs, "custom_names": []},
             format="json",
         )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_certifications_replaced(self):
+    def test_certifications_readable_via_profile_endpoint(self):
         profile = TrainerProfileFactory()
         CertificationFactory(trainer=profile, name="Old Cert")
         client = _auth_client(profile.user)
-        payload = {
-            "specialisation_ids": [],
-            "certifications": [{"name": "New Cert", "issuing_body": "NASM"}],
-        }
-        client.put(self.URL, payload, format="json")
-        assert profile.certifications.count() == 1
-        assert profile.certifications.first().name == "New Cert"
+        resp = client.get("/api/v1/profiles/me/certifications/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert len(resp.data["data"]) == 1
 
-    def test_trainer_step2_saves_services(self):
+    def test_trainer_services_creatable_via_me_endpoint(self):
         profile = TrainerProfileFactory()
         client = _auth_client(profile.user)
-        payload = {
-            "specialisation_ids": [],
-            "certifications": [],
-            "services": [
-                {"name": "Personal Training", "session_type": "physical"},
-                {"name": "Online Coaching", "session_type": "virtual"},
-            ],
-        }
-        resp = client.put(self.URL, payload, format="json")
-        assert resp.status_code == status.HTTP_200_OK
-        assert profile.services.count() == 2
+        payload = {"name": "Personal Training", "session_type": "physical"}
+        resp = client.post("/api/v1/profiles/me/services/", payload, format="json")
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert profile.services.count() == 1
 
-    def test_trainer_step2_services_replaced(self):
+    def test_trainer_step2_services_listable(self):
         profile = TrainerProfileFactory()
         ServiceTrainerFactory(trainer=profile, name="Old Service")
         client = _auth_client(profile.user)
-        payload = {
-            "specialisation_ids": [],
-            "certifications": [],
-            "services": [{"name": "New Service"}],
-        }
-        client.put(self.URL, payload, format="json")
-        assert profile.services.count() == 1
-        assert profile.services.first().name == "New Service"
+        resp = client.get("/api/v1/profiles/me/services/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert len(resp.data["data"]) == 1
 
-    def test_gym_step2_saves_services(self):
+    def test_gym_services_via_onboarding_endpoint(self):
         profile = GymProfileFactory()
         client = _auth_client(profile.user)
-        payload = {
-            "services": [
-                {"name": "Group Classes", "session_type": "physical"},
-            ]
-        }
-        resp = client.put(self.URL, payload, format="json")
+        payload = {"services": [{"name": "Group Classes", "session_type": "physical"}]}
+        resp = client.post("/api/v1/onboarding/gym/services/", payload, format="json")
         assert resp.status_code == status.HTTP_200_OK
         assert profile.services.count() == 1
 
-    def test_gym_step2_empty_services_ok(self):
+    def test_gym_step2_empty_services_ok_via_onboarding(self):
         profile = GymProfileFactory()
         client = _auth_client(profile.user)
-        resp = client.put(self.URL, {"services": []}, format="json")
+        resp = client.post(
+            "/api/v1/onboarding/gym/services/", {"services": []}, format="json"
+        )
         assert resp.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.django_db
 class TestWizardStep3View:
-    URL = "/api/v1/profiles/wizard/step3/"
+    """
+    Wizard step 3 endpoint removed. Availability is managed via
+    PUT /api/v1/profiles/me/availability/.
+    """
 
-    def _av_payload(self):
-        return {
-            "availability": [
-                {
-                    "day_of_week": "monday",
-                    "start_time": "09:00",
-                    "end_time": "10:00",
-                    "session_type": "both",
-                    "duration_minutes": 60,
-                },
-                {
-                    "day_of_week": "wednesday",
-                    "start_time": "09:00",
-                    "end_time": "11:00",
-                },
-            ]
-        }
+    URL = "/api/v1/profiles/wizard/step3/"
+    AV_URL = "/api/v1/profiles/me/availability/"
+
+    def test_wizard_step3_endpoint_removed(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.put(self.URL, {}, format="json")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     def test_trainer_creates_availability(self):
         profile = TrainerProfileFactory()
         client = _auth_client(profile.user)
-        resp = client.put(self.URL, self._av_payload(), format="json")
-        assert resp.status_code == status.HTTP_200_OK
-        assert profile.availability.count() == 2
+        resp = client.post(
+            self.AV_URL,
+            {"day_of_week": "monday", "start_time": "09:00", "end_time": "10:00"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert profile.availability.count() == 1
 
     def test_gym_creates_availability(self):
         profile = GymProfileFactory()
         client = _auth_client(profile.user)
-        resp = client.put(self.URL, self._av_payload(), format="json")
-        assert resp.status_code == status.HTTP_200_OK
-        assert profile.availability.count() == 2
+        resp = client.post(
+            self.AV_URL,
+            {"day_of_week": "monday", "start_time": "09:00", "end_time": "10:00"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert profile.availability.count() == 1
 
     def test_rejects_duplicate_days(self):
         profile = TrainerProfileFactory()
+        AvailabilityTrainerFactory(trainer=profile, day_of_week="monday")
         client = _auth_client(profile.user)
-        payload = {
-            "availability": [
-                {
-                    "day_of_week": "monday",
-                    "start_time": "09:00",
-                    "end_time": "10:00",
-                },
-                {
-                    "day_of_week": "monday",
-                    "start_time": "11:00",
-                    "end_time": "12:00",
-                },
-            ]
-        }
-        resp = client.put(self.URL, payload, format="json")
+        resp = client.post(
+            self.AV_URL,
+            {"day_of_week": "monday", "start_time": "11:00", "end_time": "12:00"},
+            format="json",
+        )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_availability_replaced_not_appended(self):
+    def test_availability_slots_accumulate(self):
         profile = TrainerProfileFactory()
         AvailabilityTrainerFactory(trainer=profile, day_of_week="friday")
         client = _auth_client(profile.user)
-        client.put(self.URL, self._av_payload(), format="json")
-        # Only monday and wednesday slots should exist after replacement
+        client.post(
+            self.AV_URL,
+            {"day_of_week": "monday", "start_time": "09:00", "end_time": "10:00"},
+            format="json",
+        )
         assert profile.availability.count() == 2
         days = list(profile.availability.values_list("day_of_week", flat=True))
-        assert "friday" not in days
+        assert "friday" in days
 
 
 @pytest.mark.django_db
 class TestWizardStep4View:
+    """
+    Wizard step 4 endpoint removed. Profile publishing and products preference
+    is managed via POST /api/v1/onboarding/trainer/products/.
+    """
+
     URL = "/api/v1/profiles/wizard/step4/publish/"
+    PRODUCTS_URL = "/api/v1/onboarding/trainer/products/"
 
-    def _ready_profile(self):
-        """Return a trainer profile with ≥60% completion."""
-        return TrainerProfileFactory(
-            full_name="Ready Trainer",
-            bio="A solid bio",
-            location="Lagos",
-            profile_photo_url="http://example.com/photo.jpg",
-        )
-
-    def test_publishes_profile(self):
-        profile = self._ready_profile()
-        BasicPlanFactory()
-        SubscriptionFactory(user=profile.user)
+    def test_wizard_step4_endpoint_removed(self):
+        profile = TrainerProfileFactory()
         client = _auth_client(profile.user)
         resp = client.post(self.URL)
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_trainer_products_publishes_profile(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.post(self.PRODUCTS_URL, {"offers_products": False}, format="json")
         assert resp.status_code == status.HTTP_200_OK
         profile.refresh_from_db()
         assert profile.is_published is True
-        assert profile.wizard_completed is True
-        assert profile.wizard_step == 4
 
     def test_completes_onboarding(self):
-        profile = self._ready_profile()
-        BasicPlanFactory()
-        SubscriptionFactory(user=profile.user)
+        profile = TrainerProfileFactory()
         client = _auth_client(profile.user)
-        client.post(self.URL)
+        client.post(self.PRODUCTS_URL, {"offers_products": False}, format="json")
         profile.user.refresh_from_db()
         assert profile.user.onboarding_status == "completed"
 
-    def test_blocked_when_subscription_locked(self):
-        from apps.subscriptions.models import Subscription
-
-        profile = self._ready_profile()
-        BasicPlanFactory()
-        SubscriptionFactory(user=profile.user, status=Subscription.Status.LOCKED)
+    def test_sets_offers_products_true(self):
+        profile = TrainerProfileFactory()
         client = _auth_client(profile.user)
-        resp = client.post(self.URL)
-        assert resp.status_code == status.HTTP_403_FORBIDDEN
-
-    def test_low_completion_does_not_block_publish(self):
-        profile = TrainerProfileFactory()  # minimal completion
-        BasicPlanFactory()
-        SubscriptionFactory(user=profile.user)
-        client = _auth_client(profile.user)
-        resp = client.post(self.URL)
-        assert resp.status_code == status.HTTP_200_OK
+        client.post(self.PRODUCTS_URL, {"offers_products": True}, format="json")
+        profile.refresh_from_db()
+        assert profile.offers_products is True
 
     def test_publish_at_any_completion_percentage(self):
         profile = TrainerProfileFactory(
@@ -324,26 +264,33 @@ class TestWizardStep4View:
             cover_photo_url="http://example.com/cover.jpg",
         )
         assert profile.profile_completion_percentage < 60
-        BasicPlanFactory()
-        SubscriptionFactory(user=profile.user)
         client = _auth_client(profile.user)
-        resp = client.post(self.URL)
+        resp = client.post(self.PRODUCTS_URL, {"offers_products": False}, format="json")
         assert resp.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.django_db
 class TestWizardStatusView:
+    """
+    Wizard status endpoint removed. Profile completion percentage is
+    returned by GET /api/v1/profiles/me/.
+    """
+
     URL = "/api/v1/profiles/wizard/status/"
 
-    def test_returns_correct_percentage(self):
-        profile = TrainerProfileFactory(full_name="Test", wizard_step=1)
+    def test_wizard_status_endpoint_removed(self):
+        profile = TrainerProfileFactory(full_name="Test")
         client = _auth_client(profile.user)
         resp = client.get(self.URL)
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_profile_completion_percentage_in_me_endpoint(self):
+        profile = TrainerProfileFactory(full_name="Test")
+        client = _auth_client(profile.user)
+        resp = client.get("/api/v1/profiles/me/")
         assert resp.status_code == status.HTTP_200_OK
         data = resp.data["data"]
         assert "profile_completion_percentage" in data
-        assert "missing_fields" in data
-        assert "needs_specialisation" in data
 
 
 @pytest.mark.django_db
@@ -566,14 +513,25 @@ class TestProfileVisibilityView:
 
 @pytest.mark.django_db
 class TestWizardPublishGateRemoved:
-    URL = "/api/v1/profiles/wizard/step4/publish/"
+    """
+    The old wizard publish gate (subscription + 60% completion check) is removed.
+    Publishing now happens via POST /api/v1/onboarding/trainer/products/ without
+    any completion-percentage or subscription gate.
+    """
 
-    def test_low_completion_trainer_can_publish(self):
-        profile = TrainerProfileFactory()  # minimal completion
-        BasicPlanFactory()
-        SubscriptionFactory(user=profile.user)
+    URL = "/api/v1/profiles/wizard/step4/publish/"
+    PRODUCTS_URL = "/api/v1/onboarding/trainer/products/"
+
+    def test_wizard_publish_endpoint_removed(self):
+        profile = TrainerProfileFactory()
         client = _auth_client(profile.user)
         resp = client.post(self.URL)
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_low_completion_trainer_can_publish(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.post(self.PRODUCTS_URL, {"offers_products": False}, format="json")
         assert resp.status_code == status.HTTP_200_OK
         profile.refresh_from_db()
         assert profile.is_published is True

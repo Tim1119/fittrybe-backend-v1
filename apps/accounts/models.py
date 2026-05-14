@@ -62,6 +62,7 @@ class User(AbstractUser):
     )
     onboarding_completed_at = models.DateTimeField(null=True, blank=True)
     is_first_login = models.BooleanField(default=True)
+    onboarding_step = models.IntegerField(default=0)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

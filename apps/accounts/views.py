@@ -64,25 +64,25 @@ def _decode_uid(uid):
 
 
 def _get_onboarding_data(user, is_first_login):
-    needs_specialisation = False
-    profile_completion = 0
-
     try:
         if user.role == "trainer":
             profile = user.trainer_profile
-            profile_completion = profile.profile_completion_percentage
-            needs_specialisation = not profile.specialisations.exists()
+            is_published = profile.is_published
         elif user.role == "gym":
             profile = user.gym_profile
-            profile_completion = profile.profile_completion_percentage
+            is_published = profile.is_published
+        else:
+            profile = user.client_profile
+            is_published = False
     except Exception:
-        pass
+        is_published = False
 
     return {
         "status": user.onboarding_status,
         "is_first_login": is_first_login,
-        "needs_specialisation": needs_specialisation,
-        "profile_completion_percentage": profile_completion,
+        "current_step": user.onboarding_step,
+        "total_steps": 2,
+        "is_profile_published": is_published,
     }
 
 
@@ -664,133 +664,6 @@ class CompleteOnboardingView(APIView):
 )
 class TokenRefreshView(_TokenRefreshView):
     pass
-
-
-def _get_onboarding_profile(user):
-    """Return the wizard profile for a trainer or gym user, or None."""
-    try:
-        if user.role == "trainer":
-            return user.trainer_profile
-        if user.role == "gym":
-            return user.gym_profile
-    except Exception:
-        pass
-    return None
-
-
-@extend_schema(
-    summary="Record completed onboarding wizard step",
-    description=(
-        "Called by the Flutter app after the user completes each onboarding screen. "
-        "Updates wizard_step to max(current, step) so it never goes backwards. "
-        "Sets onboarding_status to in_progress unless already completed. "
-        "Idempotent — safe to call multiple times for the same step.\n\n"
-        "Only available to trainer and gym roles."
-    ),
-    request=inline_serializer(
-        name="OnboardingStepRequest",
-        fields={"step": drf_serializers.IntegerField(help_text="Wizard step 1–4")},
-    ),
-    responses={
-        200: OpenApiResponse(
-            description=(
-                "Step recorded — returns current wizard_step and onboarding_status"
-            ),
-        ),
-        400: OpenApiResponse(description="step value not in 1–4"),
-        401: OpenApiResponse(description="Not authenticated"),
-        403: OpenApiResponse(description="Client role — not allowed"),
-    },
-    tags=["Onboarding"],
-)
-class OnboardingStepView(APIView):
-    permission_classes = [IsAuthenticated, IsTrainerOrGym]
-
-    def patch(self, request):
-        try:
-            step = int(request.data.get("step", ""))
-        except (TypeError, ValueError):
-            step = None
-
-        if step not in (1, 2, 3, 4):
-            return APIResponse.error(
-                message="step must be an integer between 1 and 4.",
-                code=ErrorCode.VALIDATION_ERROR,
-                status_code=400,
-            )
-
-        user = request.user
-        profile = _get_onboarding_profile(user)
-        if profile is None:
-            return APIResponse.error(
-                message="Profile not found.",
-                code=ErrorCode.NOT_FOUND,
-                status_code=404,
-            )
-
-        profile.wizard_step = max(profile.wizard_step, step)
-        profile.save(update_fields=["wizard_step"])
-
-        if user.onboarding_status != user.OnboardingStatus.COMPLETED:
-            user.onboarding_status = user.OnboardingStatus.IN_PROGRESS
-            user.save(update_fields=["onboarding_status"])
-
-        return APIResponse.success(
-            data={
-                "wizard_step": profile.wizard_step,
-                "onboarding_status": user.onboarding_status,
-            },
-            message="Onboarding step updated.",
-        )
-
-
-@extend_schema(
-    summary="Complete onboarding (step 5 — product listing done)",
-    description=(
-        "Called by Flutter when ONB-05 (product listing screen) is finished. "
-        "Sets wizard_step=5, onboarding_status=completed, and records the "
-        "completion timestamp. Idempotent — safe to call if already completed.\n\n"
-        "Only available to trainer and gym roles. No request body needed."
-    ),
-    request=None,
-    responses={
-        200: OpenApiResponse(
-            description="Onboarding completed — returns wizard_step, "
-            "onboarding_status, and onboarding_completed_at"
-        ),
-        401: OpenApiResponse(description="Not authenticated"),
-        403: OpenApiResponse(description="Client role — not allowed"),
-    },
-    tags=["Onboarding"],
-)
-class OnboardingCompleteView(APIView):
-    permission_classes = [IsAuthenticated, IsTrainerOrGym]
-
-    def post(self, request):
-        user = request.user
-        profile = _get_onboarding_profile(user)
-        if profile is None:
-            return APIResponse.error(
-                message="Profile not found.",
-                code=ErrorCode.NOT_FOUND,
-                status_code=404,
-            )
-
-        profile.wizard_step = max(profile.wizard_step, 5)
-        profile.save(update_fields=["wizard_step"])
-
-        user.onboarding_status = user.OnboardingStatus.COMPLETED
-        user.onboarding_completed_at = timezone.now()
-        user.save(update_fields=["onboarding_status", "onboarding_completed_at"])
-
-        return APIResponse.success(
-            data={
-                "wizard_step": profile.wizard_step,
-                "onboarding_status": user.onboarding_status,
-                "onboarding_completed_at": user.onboarding_completed_at.isoformat(),
-            },
-            message="Onboarding completed.",
-        )
 
 
 @extend_schema(

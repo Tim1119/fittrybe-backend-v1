@@ -447,18 +447,19 @@ class TestLoginView:
         assert resp.status_code == status.HTTP_200_OK
         onboarding = resp.data["data"]["onboarding"]
         assert "status" in onboarding
-        assert "needs_specialisation" in onboarding
+        assert "current_step" in onboarding
+        assert "total_steps" in onboarding
+        assert "is_profile_published" in onboarding
         assert "is_first_login" in onboarding
-        assert "profile_completion_percentage" in onboarding
 
-    def test_login_onboarding_profile_completion_defaults_to_zero(self, api_client):
+    def test_login_onboarding_current_step_defaults_to_zero(self, api_client):
         user = UserFactory()
         resp = api_client.post(
             self.URL,
             {"email": user.email, "password": "StrongPass123!"},
             format="json",
         )
-        assert resp.data["data"]["onboarding"]["profile_completion_percentage"] == 0
+        assert resp.data["data"]["onboarding"]["current_step"] == 0
 
     def test_is_first_login_set_to_false_after_first_login(self, api_client):
         user = UserFactory()
@@ -653,9 +654,10 @@ class TestMeView:
         assert resp.status_code == status.HTTP_200_OK
         onboarding = resp.data["data"]["onboarding"]
         assert "status" in onboarding
-        assert "needs_specialisation" in onboarding
+        assert "current_step" in onboarding
+        assert "total_steps" in onboarding
+        assert "is_profile_published" in onboarding
         assert "is_first_login" in onboarding
-        assert "profile_completion_percentage" in onboarding
 
     def test_unauthenticated_returns_401(self, api_client):
         resp = api_client.get(self.URL)
@@ -732,15 +734,14 @@ class TestResendVerificationView:
 
 
 # ---------------------------------------------------------------------------
-# Login onboarding response — needs_specialisation
+# Login onboarding response
+# new fields: current_step, total_steps, is_profile_published
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
 class TestLoginOnboardingResponse:
     URL = "/api/v1/auth/login/"
 
-    def test_trainer_with_no_specialisations_needs_specialisation_true(
-        self, api_client
-    ):
+    def test_trainer_with_no_onboarding_current_step_is_zero(self, api_client):
         from apps.profiles.tests.factories import TrainerProfileFactory
 
         profile = TrainerProfileFactory()
@@ -750,24 +751,21 @@ class TestLoginOnboardingResponse:
             format="json",
         )
         assert resp.status_code == status.HTTP_200_OK
-        assert resp.data["data"]["onboarding"]["needs_specialisation"] is True
+        assert resp.data["data"]["onboarding"]["current_step"] == 0
 
-    def test_trainer_with_specialisations_needs_specialisation_false(self, api_client):
-        from apps.profiles.tests.factories import (
-            SpecialisationFactory,
-            TrainerProfileFactory,
-        )
+    def test_trainer_published_profile_shows_is_profile_published_true(
+        self, api_client
+    ):
+        from apps.profiles.tests.factories import TrainerProfileFactory
 
-        profile = TrainerProfileFactory()
-        spec = SpecialisationFactory(name="LoginSpec")
-        profile.specialisations.add(spec)
+        profile = TrainerProfileFactory(is_published=True)
         resp = api_client.post(
             self.URL,
             {"email": profile.user.email, "password": "StrongPass123!"},
             format="json",
         )
         assert resp.status_code == status.HTTP_200_OK
-        assert resp.data["data"]["onboarding"]["needs_specialisation"] is False
+        assert resp.data["data"]["onboarding"]["is_profile_published"] is True
 
     def test_login_response_no_wizard_step_key(self, api_client):
         user = UserFactory()
@@ -789,7 +787,7 @@ class TestLoginOnboardingResponse:
         assert resp.status_code == status.HTTP_200_OK
         assert "is_completed" not in resp.data["data"]["onboarding"]
 
-    def test_gym_login_needs_specialisation_false(self, api_client):
+    def test_gym_login_has_is_profile_published(self, api_client):
         from apps.profiles.tests.factories import GymProfileFactory
 
         profile = GymProfileFactory()
@@ -799,4 +797,5 @@ class TestLoginOnboardingResponse:
             format="json",
         )
         assert resp.status_code == status.HTTP_200_OK
-        assert resp.data["data"]["onboarding"]["needs_specialisation"] is False
+        assert "is_profile_published" in resp.data["data"]["onboarding"]
+        assert resp.data["data"]["onboarding"]["is_profile_published"] is False

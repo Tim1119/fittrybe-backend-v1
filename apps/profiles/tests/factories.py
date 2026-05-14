@@ -42,8 +42,7 @@ class TrainerProfileFactory(DjangoModelFactory):
     profile_photo_url = ""
     cover_photo_url = ""
     is_published = False
-    wizard_step = 0
-    wizard_completed = False
+    offers_products = False
 
 
 class PublishedTrainerProfileFactory(TrainerProfileFactory):
@@ -54,8 +53,7 @@ class PublishedTrainerProfileFactory(TrainerProfileFactory):
     years_experience = 3
     pricing_range = "10000 - 20000 NGN"
     is_published = True
-    wizard_step = 4
-    wizard_completed = True
+    offers_products = False
 
 
 class GymProfileFactory(DjangoModelFactory):
@@ -72,8 +70,7 @@ class GymProfileFactory(DjangoModelFactory):
     logo_url = ""
     cover_photo_url = ""
     is_published = False
-    wizard_step = 0
-    wizard_completed = False
+    offers_products = False
 
 
 class PublishedGymProfileFactory(GymProfileFactory):
@@ -85,8 +82,7 @@ class PublishedGymProfileFactory(GymProfileFactory):
     contact_phone = "08012345678"
     business_email = "gym@example.com"
     is_published = True
-    wizard_step = 4
-    wizard_completed = True
+    offers_products = False
 
 
 class GymTrainerFactory(DjangoModelFactory):

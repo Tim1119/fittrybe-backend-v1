@@ -4,6 +4,7 @@ from apps.profiles.models import (
     Availability,
     Certification,
     ClientProfile,
+    Goal,
     GymProfile,
     GymTrainer,
     Review,
@@ -68,9 +69,9 @@ class TrainerProfileAdmin(admin.ModelAdmin):
         "gym",
         "is_published",
         "avg_rating",
-        "wizard_step",
+        "offers_products",
     )
-    list_filter = ("trainer_type", "is_published", "wizard_completed")
+    list_filter = ("trainer_type", "is_published", "offers_products")
     search_fields = ("full_name", "user__email", "location")
     raw_id_fields = ("user",)
     inlines = [AvailabilityTrainerInline, CertificationInline, ServiceTrainerInline]
@@ -84,9 +85,9 @@ class GymProfileAdmin(admin.ModelAdmin):
         "slug",
         "is_published",
         "avg_rating",
-        "wizard_step",
+        "offers_products",
     )
-    list_filter = ("is_published", "wizard_completed")
+    list_filter = ("is_published", "offers_products")
     search_fields = ("full_name", "user__email", "city", "location")
     raw_id_fields = ("user",)
     inlines = [AvailabilityGymInline, ServiceGymInline]
@@ -95,6 +96,14 @@ class GymProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Specialisation)
 class SpecialisationAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug", "is_predefined")
+    list_filter = ("is_predefined",)
+    search_fields = ("name",)
+    readonly_fields = ("slug",)
+
+
+@admin.register(Goal)
+class GoalAdmin(admin.ModelAdmin):
     list_display = ("name", "slug", "is_predefined")
     list_filter = ("is_predefined",)
     search_fields = ("name",)
@@ -122,6 +131,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
     search_fields = ("username", "user__email", "full_name")
     raw_id_fields = ("user",)
     readonly_fields = ("username", "created_at", "updated_at")
+    filter_horizontal = ("primary_goals", "specialisations")
 
     @admin.display(description="Email")
     def get_user_email(self, obj):
