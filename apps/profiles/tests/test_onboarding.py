@@ -566,7 +566,7 @@ class TestClientFocusView:
             format="json",
         )
         assert resp.status_code == 200
-        assert len(resp.data["data"]["specialisations"]) == 2
+        assert len(resp.data["data"]["focus"]) == 2
         assert resp.data["data"]["onboarding_step"] == 2
 
     def test_client_post_completes_onboarding(self, api_client):
@@ -789,3 +789,65 @@ class TestClientFocusGetReturnsSystemItems:
         assert resp.status_code == 200
         names = [f["name"] for f in resp.data["data"]["focus_areas"]]
         assert "NotAttachedFocusOnb" in names
+
+
+# ---------------------------------------------------------------------------
+# Onboarding completion response includes full profile summary
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestOnboardingCompletionResponse:
+    def test_trainer_products_post_returns_profile_summary(self, api_client):
+        from apps.profiles.tests.factories import TrainerProfileFactory
+
+        trainer = TrainerFactory()
+        TrainerProfileFactory(user=trainer, full_name="Sam Trainer", location="Lagos")
+        api_client.force_authenticate(user=trainer)
+        resp = api_client.post(
+            TRAINER_PRODUCTS_URL, {"offers_products": False}, format="json"
+        )
+        assert resp.status_code == 200
+        data = resp.data["data"]
+        assert data["role"] == "trainer"
+        assert data["full_name"] == "Sam Trainer"
+        assert data["location"] == "Lagos"
+        assert "expertise" in data
+
+    def test_gym_products_post_returns_profile_summary(self, api_client):
+        from apps.profiles.tests.factories import GymProfileFactory
+
+        gym = GymFactory()
+        GymProfileFactory(user=gym, full_name="Iron Gym", location="Abuja")
+        api_client.force_authenticate(user=gym)
+        resp = api_client.post(
+            GYM_PRODUCTS_URL, {"offers_products": True}, format="json"
+        )
+        assert resp.status_code == 200
+        data = resp.data["data"]
+        assert data["role"] == "gym"
+        assert data["full_name"] == "Iron Gym"
+        assert data["location"] == "Abuja"
+        assert "services" in data
+
+    def test_client_focus_post_returns_profile_summary(self, api_client):
+        from apps.profiles.tests.factories import ClientProfileFactory
+
+        client = ClientFactory()
+        client.country = "Nigeria"
+        client.save(update_fields=["country"])
+        ClientProfileFactory(user=client, full_name="Jane Client")
+        s = SpecialisationFactory(name="CompletionFocus")
+        api_client.force_authenticate(user=client)
+        resp = api_client.post(
+            CLIENT_FOCUS_URL,
+            {"specialisation_ids": [s.id], "custom_names": []},
+            format="json",
+        )
+        assert resp.status_code == 200
+        data = resp.data["data"]
+        assert data["role"] == "client"
+        assert data["full_name"] == "Jane Client"
+        assert data["location"] == "Nigeria"
+        assert "goals" in data
+        assert "focus" in data

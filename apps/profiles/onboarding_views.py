@@ -212,8 +212,14 @@ class TrainerProductsView(APIView):
         return APIResponse.success(
             data={
                 "offers_products": profile.offers_products,
-                "is_published": profile.is_published,
+                "is_published": True,
                 "onboarding_step": user.onboarding_step,
+                "role": "trainer",
+                "full_name": profile.full_name,
+                "location": profile.location,
+                "expertise": SpecialisationSerializer(
+                    profile.specialisations.all(), many=True
+                ).data,
             },
             message="Onboarding complete.",
         )
@@ -392,8 +398,12 @@ class GymProductsView(APIView):
         return APIResponse.success(
             data={
                 "offers_products": profile.offers_products,
-                "is_published": profile.is_published,
+                "is_published": True,
                 "onboarding_step": user.onboarding_step,
+                "role": "gym",
+                "full_name": profile.full_name,
+                "location": profile.location,
+                "services": ServiceSerializer(profile.services.all(), many=True).data,
             },
             message="Onboarding complete.",
         )
@@ -619,10 +629,14 @@ class ClientFocusView(APIView):
 
         return APIResponse.success(
             data={
-                "specialisations": SpecialisationSerializer(
+                "onboarding_step": user.onboarding_step,
+                "role": "client",
+                "full_name": profile.full_name,
+                "location": user.country,
+                "goals": GoalSerializer(profile.primary_goals.all(), many=True).data,
+                "focus": SpecialisationSerializer(
                     profile.specialisations.all(), many=True
                 ).data,
-                "onboarding_step": user.onboarding_step,
             },
             message="Focus areas updated. Onboarding complete.",
         )
