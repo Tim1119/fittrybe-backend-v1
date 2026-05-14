@@ -214,9 +214,11 @@ class TrainerProductsView(APIView):
                 "offers_products": profile.offers_products,
                 "is_published": True,
                 "onboarding_step": user.onboarding_step,
+                "current_step": user.onboarding_step,
+                "total_steps": 2,
                 "role": "trainer",
                 "full_name": profile.full_name,
-                "location": profile.location,
+                "location": user.country,
                 "expertise": SpecialisationSerializer(
                     profile.specialisations.all(), many=True
                 ).data,
@@ -400,9 +402,11 @@ class GymProductsView(APIView):
                 "offers_products": profile.offers_products,
                 "is_published": True,
                 "onboarding_step": user.onboarding_step,
+                "current_step": user.onboarding_step,
+                "total_steps": 2,
                 "role": "gym",
                 "full_name": profile.full_name,
-                "location": profile.location,
+                "location": user.country,
                 "services": ServiceSerializer(profile.services.all(), many=True).data,
             },
             message="Onboarding complete.",
@@ -630,6 +634,8 @@ class ClientFocusView(APIView):
         return APIResponse.success(
             data={
                 "onboarding_step": user.onboarding_step,
+                "current_step": user.onboarding_step,
+                "total_steps": 2,
                 "role": "client",
                 "full_name": profile.full_name,
                 "location": user.country,

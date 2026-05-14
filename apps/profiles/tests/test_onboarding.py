@@ -802,6 +802,8 @@ class TestOnboardingCompletionResponse:
         from apps.profiles.tests.factories import TrainerProfileFactory
 
         trainer = TrainerFactory()
+        trainer.country = "Nigeria"
+        trainer.save(update_fields=["country"])
         TrainerProfileFactory(user=trainer, full_name="Sam Trainer", location="Lagos")
         api_client.force_authenticate(user=trainer)
         resp = api_client.post(
@@ -811,13 +813,17 @@ class TestOnboardingCompletionResponse:
         data = resp.data["data"]
         assert data["role"] == "trainer"
         assert data["full_name"] == "Sam Trainer"
-        assert data["location"] == "Lagos"
+        assert data["location"] == "Nigeria"
+        assert data["current_step"] == 2
+        assert data["total_steps"] == 2
         assert "expertise" in data
 
     def test_gym_products_post_returns_profile_summary(self, api_client):
         from apps.profiles.tests.factories import GymProfileFactory
 
         gym = GymFactory()
+        gym.country = "Ghana"
+        gym.save(update_fields=["country"])
         GymProfileFactory(user=gym, full_name="Iron Gym", location="Abuja")
         api_client.force_authenticate(user=gym)
         resp = api_client.post(
@@ -827,7 +833,9 @@ class TestOnboardingCompletionResponse:
         data = resp.data["data"]
         assert data["role"] == "gym"
         assert data["full_name"] == "Iron Gym"
-        assert data["location"] == "Abuja"
+        assert data["location"] == "Ghana"
+        assert data["current_step"] == 2
+        assert data["total_steps"] == 2
         assert "services" in data
 
     def test_client_focus_post_returns_profile_summary(self, api_client):
@@ -849,5 +857,7 @@ class TestOnboardingCompletionResponse:
         assert data["role"] == "client"
         assert data["full_name"] == "Jane Client"
         assert data["location"] == "Nigeria"
+        assert data["current_step"] == 2
+        assert data["total_steps"] == 2
         assert "goals" in data
         assert "focus" in data
