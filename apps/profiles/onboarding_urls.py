@@ -36,6 +36,4 @@ urlpatterns = [
         onboarding_views.ClientFocusDetailView.as_view(),
         name="client-focus-detail",
     ),
-    # Public
-    path("goals/", onboarding_views.GoalListView.as_view(), name="goals-list"),
 ]

@@ -35,6 +35,7 @@ from apps.profiles.models import (
     Availability,
     Certification,
     ClientProfile,
+    Goal,
     GymProfile,
     GymTrainer,
     Review,
@@ -47,6 +48,7 @@ from apps.profiles.serializers import (
     CertificationSerializer,
     ClientProfileSerializer,
     CoverUploadSerializer,
+    GoalSerializer,
     GymProfilePublicSerializer,
     GymProfileSerializer,
     GymTrainerListItemSerializer,
@@ -592,65 +594,113 @@ class CoverPhotoUploadView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# Specialisations
+# System lookup endpoints (public, no auth — picker screens)
 # ---------------------------------------------------------------------------
 
 
 @extend_schema(
-    summary="List specialisations",
-    description="""
-Returns all available specialisations that can be assigned to trainer profiles.
-
-Use the returned `id` values in `specialisation_ids` when calling
-`PUT /api/v1/profiles/wizard/step2/`.
-
-Use the returned `slug` values as the `specialisation` query parameter
-when calling `GET /api/v1/profiles/search/`.
-
-No authentication required.
-    """,
+    summary="List all expertise options available in the system",
+    description=(
+        "Returns all expertise/specialisation options. "
+        "Use ?is_predefined=true to return only the 20 predefined options. "
+        "Use the returned IDs when calling "
+        "POST /api/v1/onboarding/trainer/expertise/ or "
+        "POST /api/v1/profiles/me/expertise/"
+    ),
+    parameters=[
+        OpenApiParameter(
+            "is_predefined",
+            str,
+            description="Filter by predefined flag. Pass true or false.",
+            required=False,
+            enum=["true", "false"],
+        )
+    ],
     responses={
         200: OpenApiResponse(
             response=SpecialisationSerializer(many=True),
-            description="List of all specialisations",
+            description="List of expertise/specialisation options",
         )
     },
-    tags=["Profiles"],
+    tags=["Expertise & Goals"],
     auth=[],
 )
-class SpecialisationListView(APIView):
+class ExpertiseListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        specs = Specialisation.objects.all()
+        qs = Specialisation.objects.all().order_by("name")
+        is_predefined = request.query_params.get("is_predefined")
+        if is_predefined == "true":
+            qs = qs.filter(is_predefined=True)
+        elif is_predefined == "false":
+            qs = qs.filter(is_predefined=False)
         return APIResponse.success(
-            data=SpecialisationSerializer(specs, many=True).data,
-            message="Specialisations retrieved.",
+            data=SpecialisationSerializer(qs, many=True).data,
+            message="Expertise options retrieved.",
+        )
+
+
+@extend_schema(
+    summary="List all goal options available in the system",
+    description=(
+        "Returns all goal options. "
+        "Use ?is_predefined=true to return only the 6 predefined options. "
+        "Use the returned IDs when calling "
+        "POST /api/v1/onboarding/client/goal/ or "
+        "POST /api/v1/profiles/me/goals/"
+    ),
+    parameters=[
+        OpenApiParameter(
+            "is_predefined",
+            str,
+            description="Filter by predefined flag. Pass true or false.",
+            required=False,
+            enum=["true", "false"],
+        )
+    ],
+    responses={
+        200: OpenApiResponse(
+            response=GoalSerializer(many=True),
+            description="List of goal options",
+        )
+    },
+    tags=["Expertise & Goals"],
+    auth=[],
+)
+class GoalListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        qs = Goal.objects.all().order_by("name")
+        is_predefined = request.query_params.get("is_predefined")
+        if is_predefined == "true":
+            qs = qs.filter(is_predefined=True)
+        elif is_predefined == "false":
+            qs = qs.filter(is_predefined=False)
+        return APIResponse.success(
+            data=GoalSerializer(qs, many=True).data,
+            message="Goal options retrieved.",
         )
 
 
 # ---------------------------------------------------------------------------
-# My specialisations (first login step)
+# My expertise (trainer/gym)
 # ---------------------------------------------------------------------------
 
 
 @extend_schema(
-    summary="Get or attach specialisations on my profile",
-    description="""
-GET — returns specialisations currently attached to the authenticated trainer's profile.
-Returns an empty list for gym accounts.
-
-POST — attaches specialisations to the authenticated trainer's profile (additive).
-Maximum 10 total specialisations.
-
-- `specialisation_ids` — IDs from `GET /api/v1/profiles/specialisations/`
-- `custom_names` — creates new non-predefined Specialisation rows then attaches them
-
-After the first attachment, if the trainer has not yet completed onboarding,
-`complete_onboarding()` is called automatically.
-    """,
+    summary="Get or update my expertise (trainer/gym)",
+    description=(
+        "GET — returns expertise currently attached to the authenticated trainer "
+        "or gym profile.\n"
+        "POST — adds expertise to the profile. Additive. "
+        "Use expertise IDs from GET /api/v1/expertise/\n"
+        "Body: {expertise_ids: [1,2,3], custom_names: ['Animal Flow']}\n"
+        "Max 10 total."
+    ),
     request=inline_serializer(
-        name="ProfileSpecialisationRequest",
+        name="ProfileExpertiseRequest",
         fields={
             "specialisation_ids": drf_serializers.ListField(
                 child=drf_serializers.IntegerField(), required=False, default=list
@@ -661,15 +711,13 @@ After the first attachment, if the trainer has not yet completed onboarding,
         },
     ),
     responses={
-        200: OpenApiResponse(
-            description="Specialisations attached, updated list returned"
-        ),
-        400: OpenApiResponse(description="Exceeds 10-specialisation limit"),
+        200: OpenApiResponse(description="Expertise attached, updated list returned"),
+        400: OpenApiResponse(description="Exceeds 10-expertise limit"),
         403: OpenApiResponse(description="Clients not allowed"),
     },
     tags=["Profiles"],
 )
-class ProfileSpecialisationView(APIView):
+class ProfileExpertiseView(APIView):
     permission_classes = [IsAuthenticated, IsTrainerOrGym]
 
     def get(self, request):
@@ -682,13 +730,12 @@ class ProfileSpecialisationView(APIView):
                 data=SpecialisationSerializer(
                     profile.specialisations.all(), many=True
                 ).data,
-                message="Specialisations retrieved.",
+                message="Expertise retrieved.",
             )
         else:
-            # Gyms do not have specialisations
             return APIResponse.success(
                 data=[],
-                message="Specialisations retrieved.",
+                message="Expertise retrieved.",
             )
 
     def post(self, request):
@@ -708,7 +755,7 @@ class ProfileSpecialisationView(APIView):
                         profile.profile_completion_percentage
                     ),
                 },
-                message="Specialisations updated.",
+                message="Expertise updated.",
             )
 
         spec_ids = request.data.get("specialisation_ids", []) or []
@@ -746,30 +793,30 @@ class ProfileSpecialisationView(APIView):
                 ).data,
                 "profile_completion_percentage": profile.profile_completion_percentage,
             },
-            message="Specialisations updated.",
+            message="Expertise updated.",
         )
 
 
 @extend_schema(
-    summary="Remove a specialisation from my profile",
+    summary="Remove an expertise from my profile",
     description=(
-        "Remove the given specialisation from the profile's M2M. "
-        "The Specialisation object itself is not deleted."
+        "Removes the expertise from this trainer or gym's profile. "
+        "The expertise option itself is not deleted from the system."
     ),
     responses={
         204: OpenApiResponse(description="Removed"),
-        404: OpenApiResponse(description="Specialisation not attached to this profile"),
+        404: OpenApiResponse(description="Expertise not attached to this profile"),
     },
     tags=["Profiles"],
 )
-class ProfileSpecialisationDetailView(APIView):
+class ProfileExpertiseDetailView(APIView):
     permission_classes = [IsAuthenticated, IsTrainerOrGym]
 
     def delete(self, request, specialisation_id):
         user = request.user
         if user.role != "trainer":
             return APIResponse.error(
-                message="Specialisation not found on your profile.",
+                message="Expertise not found on your profile.",
                 code=ErrorCode.NOT_FOUND,
                 status_code=404,
             )
@@ -781,7 +828,277 @@ class ProfileSpecialisationDetailView(APIView):
             spec = profile.specialisations.get(id=specialisation_id)
         except Specialisation.DoesNotExist:
             return APIResponse.error(
-                message="Specialisation not found on your profile.",
+                message="Expertise not found on your profile.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        profile.specialisations.remove(spec)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Client goals CRUD (post-onboarding)
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(
+    summary="Get my goals (client)",
+    description=(
+        "GET — returns goals currently attached to the authenticated client's profile. "
+        "Use GET /api/v1/expertise/goals/ to see all available goal options.\n"
+        "POST — adds goals to the client profile. Additive — existing goals are kept. "
+        "Use goal IDs from GET /api/v1/expertise/goals/\n"
+        "Max 6 total goals."
+    ),
+    request=inline_serializer(
+        name="ProfileClientGoalsRequest",
+        fields={
+            "goal_ids": drf_serializers.ListField(
+                child=drf_serializers.IntegerField(), required=False, default=list
+            ),
+            "custom_names": drf_serializers.ListField(
+                child=drf_serializers.CharField(), required=False, default=list
+            ),
+        },
+    ),
+    responses={
+        200: OpenApiResponse(description="Goals retrieved or updated"),
+        400: OpenApiResponse(description="Exceeds 6-goal limit"),
+        401: OpenApiResponse(description="Not authenticated"),
+        403: OpenApiResponse(description="Trainer or gym accounts not allowed"),
+    },
+    tags=["Profiles"],
+)
+class ProfileClientGoalsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _check_client(self, user):
+        if user.role != "client":
+            return APIResponse.error(
+                message="Only clients can manage goals.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+        return None
+
+    def get(self, request):
+        err = self._check_client(request.user)
+        if err:
+            return err
+        profile = _get_client_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+        return APIResponse.success(
+            data=GoalSerializer(profile.primary_goals.all(), many=True).data,
+            message="Goals retrieved.",
+        )
+
+    def post(self, request):
+        err = self._check_client(request.user)
+        if err:
+            return err
+        profile = _get_client_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+
+        goal_ids = request.data.get("goal_ids", []) or []
+        custom_names = request.data.get("custom_names", []) or []
+
+        existing_count = profile.primary_goals.count()
+        if existing_count + len(goal_ids) + len(custom_names) > 6:
+            return APIResponse.error(
+                message="You can have at most 6 goals.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        with transaction.atomic():
+            if goal_ids:
+                goals = Goal.objects.filter(id__in=goal_ids)
+                profile.primary_goals.add(*goals)
+            for raw_name in custom_names:
+                name = raw_name.strip()
+                if name:
+                    goal, _ = Goal.objects.get_or_create(
+                        name=name, defaults={"is_predefined": False}
+                    )
+                    profile.primary_goals.add(goal)
+
+        return APIResponse.success(
+            data=GoalSerializer(profile.primary_goals.all(), many=True).data,
+            message="Goals updated.",
+        )
+
+
+@extend_schema(
+    summary="Remove a goal from my profile (client)",
+    description=(
+        "Removes the goal from the client's profile. "
+        "The goal option itself is not deleted from the system."
+    ),
+    responses={
+        204: OpenApiResponse(description="Removed"),
+        404: OpenApiResponse(description="Goal not attached to this client"),
+    },
+    tags=["Profiles"],
+)
+class ProfileClientGoalDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, goal_id):
+        if request.user.role != "client":
+            return APIResponse.error(
+                message="Only clients can manage goals.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+        profile = _get_client_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+
+        try:
+            goal = profile.primary_goals.get(id=goal_id)
+        except Goal.DoesNotExist:
+            return APIResponse.error(
+                message="Goal not found on your profile.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=404,
+            )
+
+        profile.primary_goals.remove(goal)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Client focus CRUD (post-onboarding)
+# ---------------------------------------------------------------------------
+
+
+@extend_schema(
+    summary="Get my focus areas (client)",
+    description=(
+        "GET — returns focus areas currently attached to the authenticated client's "
+        "profile. Use GET /api/v1/expertise/ to see all available options.\n"
+        "POST — adds focus areas to the client profile. Additive — existing focus "
+        "areas are kept. Use IDs from GET /api/v1/expertise/\n"
+        "Max 10 total."
+    ),
+    request=inline_serializer(
+        name="ProfileClientFocusRequest",
+        fields={
+            "specialisation_ids": drf_serializers.ListField(
+                child=drf_serializers.IntegerField(), required=False, default=list
+            ),
+            "custom_names": drf_serializers.ListField(
+                child=drf_serializers.CharField(), required=False, default=list
+            ),
+        },
+    ),
+    responses={
+        200: OpenApiResponse(description="Focus areas retrieved or updated"),
+        400: OpenApiResponse(description="Exceeds 10-focus limit"),
+        401: OpenApiResponse(description="Not authenticated"),
+        403: OpenApiResponse(description="Trainer or gym accounts not allowed"),
+    },
+    tags=["Profiles"],
+)
+class ProfileClientFocusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _check_client(self, user):
+        if user.role != "client":
+            return APIResponse.error(
+                message="Only clients can manage focus areas.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+        return None
+
+    def get(self, request):
+        err = self._check_client(request.user)
+        if err:
+            return err
+        profile = _get_client_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+        return APIResponse.success(
+            data=SpecialisationSerializer(
+                profile.specialisations.all(), many=True
+            ).data,
+            message="Focus areas retrieved.",
+        )
+
+    def post(self, request):
+        err = self._check_client(request.user)
+        if err:
+            return err
+        profile = _get_client_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+
+        spec_ids = request.data.get("specialisation_ids", []) or []
+        custom_names = request.data.get("custom_names", []) or []
+
+        existing_count = profile.specialisations.count()
+        if existing_count + len(spec_ids) + len(custom_names) > 10:
+            return APIResponse.error(
+                message="You can have at most 10 focus areas.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        with transaction.atomic():
+            if spec_ids:
+                specs = Specialisation.objects.filter(id__in=spec_ids)
+                profile.specialisations.add(*specs)
+            for raw_name in custom_names:
+                name = raw_name.strip()
+                if name:
+                    spec, _ = Specialisation.objects.get_or_create(
+                        name=name, defaults={"is_predefined": False}
+                    )
+                    profile.specialisations.add(spec)
+
+        return APIResponse.success(
+            data=SpecialisationSerializer(
+                profile.specialisations.all(), many=True
+            ).data,
+            message="Focus areas updated.",
+        )
+
+
+@extend_schema(
+    summary="Remove a focus area from my profile (client)",
+    description=(
+        "Removes the focus area from the client's profile. "
+        "The expertise option itself is not deleted from the system."
+    ),
+    responses={
+        204: OpenApiResponse(description="Removed"),
+        404: OpenApiResponse(description="Focus area not attached to this client"),
+    },
+    tags=["Profiles"],
+)
+class ProfileClientFocusDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, specialisation_id):
+        if request.user.role != "client":
+            return APIResponse.error(
+                message="Only clients can manage focus areas.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=403,
+            )
+        profile = _get_client_profile(request.user)
+        if not profile:
+            return _profile_not_found()
+
+        try:
+            spec = profile.specialisations.get(id=specialisation_id)
+        except Specialisation.DoesNotExist:
+            return APIResponse.error(
+                message="Focus area not found on your profile.",
                 code=ErrorCode.NOT_FOUND,
                 status_code=404,
             )

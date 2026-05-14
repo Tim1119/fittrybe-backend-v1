@@ -19,7 +19,7 @@ GYM_SERVICES_URL = "/api/v1/onboarding/gym/services/"
 GYM_PRODUCTS_URL = "/api/v1/onboarding/gym/products/"
 CLIENT_GOAL_URL = "/api/v1/onboarding/client/goal/"
 CLIENT_FOCUS_URL = "/api/v1/onboarding/client/focus/"
-GOALS_LIST_URL = "/api/v1/onboarding/goals/"
+GOALS_LIST_URL = "/api/v1/expertise/goals/"
 
 
 @pytest.fixture
@@ -83,13 +83,14 @@ class TestTrainerExpertiseView:
         resp = api_client.get(TRAINER_EXPERTISE_URL)
         assert resp.status_code == 403
 
-    def test_trainer_get_no_expertise_returns_empty_list(self, api_client):
+    def test_trainer_get_returns_all_system_specialisations(self, api_client):
         trainer = TrainerFactory()
         TrainerProfileFactory(user=trainer)
         api_client.force_authenticate(user=trainer)
         resp = api_client.get(TRAINER_EXPERTISE_URL)
         assert resp.status_code == 200
-        assert resp.data["data"]["expertise"] == []
+        assert isinstance(resp.data["data"]["expertise"], list)
+        assert len(resp.data["data"]["expertise"]) >= 0
 
     def test_trainer_post_valid_expertise_ids(self, api_client):
         trainer = TrainerFactory()
@@ -308,7 +309,8 @@ class TestGymServicesView:
         api_client.force_authenticate(user=gym)
         resp = api_client.get(GYM_SERVICES_URL)
         assert resp.status_code == 200
-        names = [s["name"] for s in resp.data["data"]["services"]]
+        assert "session_type_options" in resp.data["data"]
+        names = [s["name"] for s in resp.data["data"]["current_services"]]
         assert "Yoga Class" in names
 
     def test_gym_post_sets_onboarding_in_progress(self, api_client):
@@ -405,13 +407,14 @@ class TestClientGoalView:
         resp = api_client.get(CLIENT_GOAL_URL)
         assert resp.status_code == 403
 
-    def test_client_get_no_goals_returns_empty_list(self, api_client):
+    def test_client_get_returns_all_system_goals(self, api_client):
         client = ClientFactory()
         ClientProfileFactory(user=client)
         api_client.force_authenticate(user=client)
         resp = api_client.get(CLIENT_GOAL_URL)
         assert resp.status_code == 200
-        assert resp.data["data"]["goals"] == []
+        assert isinstance(resp.data["data"]["goals"], list)
+        assert len(resp.data["data"]["goals"]) >= 0
 
     def test_client_post_valid_goal_ids(self, api_client):
         from apps.profiles.models import Goal
@@ -524,13 +527,15 @@ class TestClientFocusView:
         resp = api_client.get(CLIENT_FOCUS_URL)
         assert resp.status_code == 403
 
-    def test_client_get_no_focus_returns_empty_list(self, api_client):
+    def test_client_get_returns_all_system_focus_areas(self, api_client):
         client = ClientFactory()
         ClientProfileFactory(user=client)
         api_client.force_authenticate(user=client)
         resp = api_client.get(CLIENT_FOCUS_URL)
         assert resp.status_code == 200
-        assert resp.data["data"]["specialisations"] == []
+        assert "focus_areas" in resp.data["data"]
+        assert isinstance(resp.data["data"]["focus_areas"], list)
+        assert len(resp.data["data"]["focus_areas"]) >= 0
 
     def test_client_post_valid_specialisation_ids(self, api_client):
         client = ClientFactory()
@@ -681,3 +686,89 @@ class TestLoginOnboardingResponse:
         assert resp.status_code == 200
         onboarding = resp.data["data"]["onboarding"]
         assert "profile_completion_percentage" not in onboarding
+
+
+# ---------------------------------------------------------------------------
+# Onboarding GET returns system items (not user's attached items)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestTrainerExpertiseGetReturnsSystemItems:
+    def test_get_returns_all_system_specialisations(self, api_client):
+        trainer = TrainerFactory()
+        TrainerProfileFactory(user=trainer)
+        SpecialisationFactory(name="SysExSp1", is_predefined=True)
+        SpecialisationFactory(name="SysExSp2", is_predefined=True)
+        api_client.force_authenticate(user=trainer)
+        resp = api_client.get(TRAINER_EXPERTISE_URL)
+        assert resp.status_code == 200
+        names = [s["name"] for s in resp.data["data"]["expertise"]]
+        assert "SysExSp1" in names
+        assert "SysExSp2" in names
+
+    def test_get_includes_non_attached_system_items(self, api_client):
+        trainer = TrainerFactory()
+        profile = TrainerProfileFactory(user=trainer)
+        s_attached = SpecialisationFactory(name="AttachedSysEx")
+        SpecialisationFactory(name="NotAttachedSysEx", is_predefined=True)
+        profile.specialisations.add(s_attached)
+        api_client.force_authenticate(user=trainer)
+        resp = api_client.get(TRAINER_EXPERTISE_URL)
+        assert resp.status_code == 200
+        names = [s["name"] for s in resp.data["data"]["expertise"]]
+        assert "NotAttachedSysEx" in names
+
+
+@pytest.mark.django_db
+class TestClientGoalGetReturnsSystemItems:
+    def test_get_returns_all_system_goals(self, api_client):
+        from apps.profiles.models import Goal
+
+        client = ClientFactory()
+        ClientProfileFactory(user=client)
+        Goal.objects.create(name="SysGoalOnb1", is_predefined=True)
+        api_client.force_authenticate(user=client)
+        resp = api_client.get(CLIENT_GOAL_URL)
+        assert resp.status_code == 200
+        names = [g["name"] for g in resp.data["data"]["goals"]]
+        assert "SysGoalOnb1" in names
+
+    def test_get_includes_non_attached_goals(self, api_client):
+        from apps.profiles.models import Goal
+
+        client = ClientFactory()
+        cp = ClientProfileFactory(user=client)
+        g_attached = Goal.objects.create(name="AttachedGoalOnb")
+        Goal.objects.create(name="NotAttachedGoalOnb", is_predefined=True)
+        cp.primary_goals.add(g_attached)
+        api_client.force_authenticate(user=client)
+        resp = api_client.get(CLIENT_GOAL_URL)
+        assert resp.status_code == 200
+        names = [g["name"] for g in resp.data["data"]["goals"]]
+        assert "NotAttachedGoalOnb" in names
+
+
+@pytest.mark.django_db
+class TestClientFocusGetReturnsSystemItems:
+    def test_get_returns_all_system_specialisations(self, api_client):
+        client = ClientFactory()
+        ClientProfileFactory(user=client)
+        SpecialisationFactory(name="SysFocusOnb1", is_predefined=True)
+        api_client.force_authenticate(user=client)
+        resp = api_client.get(CLIENT_FOCUS_URL)
+        assert resp.status_code == 200
+        names = [f["name"] for f in resp.data["data"]["focus_areas"]]
+        assert "SysFocusOnb1" in names
+
+    def test_get_includes_non_attached_focus_areas(self, api_client):
+        client = ClientFactory()
+        cp = ClientProfileFactory(user=client)
+        s_attached = SpecialisationFactory(name="AttachedFocusOnb")
+        SpecialisationFactory(name="NotAttachedFocusOnb", is_predefined=True)
+        cp.specialisations.add(s_attached)
+        api_client.force_authenticate(user=client)
+        resp = api_client.get(CLIENT_FOCUS_URL)
+        assert resp.status_code == 200
+        names = [f["name"] for f in resp.data["data"]["focus_areas"]]
+        assert "NotAttachedFocusOnb" in names

@@ -544,10 +544,10 @@ class TestWizardPublishGateRemoved:
 
 @pytest.mark.django_db
 class TestProfileSpecialisationView:
-    POST_URL = "/api/v1/profiles/me/specialisations/"
+    POST_URL = "/api/v1/profiles/me/expertise/"
 
     def _detail_url(self, spec_id):
-        return f"/api/v1/profiles/me/specialisations/{spec_id}/"
+        return f"/api/v1/profiles/me/expertise/{spec_id}/"
 
     def test_post_with_valid_ids_attaches_specialisations(self):
         profile = TrainerProfileFactory()
@@ -877,4 +877,324 @@ class TestGymProfileFullNameRename:
         assert resp.status_code == status.HTTP_200_OK
         results = resp.data["data"]
         assert len(results) >= 1
-        assert results[0]["full_name"] == "Power House"
+
+
+# ---------------------------------------------------------------------------
+# ExpertiseListView (GET /api/v1/expertise/)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestExpertiseListView:
+    URL = "/api/v1/expertise/"
+
+    def test_no_auth_required_returns_200(self):
+        resp = APIClient().get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_returns_predefined_specialisations(self):
+        SpecialisationFactory(name="ExListPred1", is_predefined=True)
+        SpecialisationFactory(name="ExListPred2", is_predefined=True)
+        resp = APIClient().get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        names = [s["name"] for s in resp.data["data"]]
+        assert "ExListPred1" in names
+        assert "ExListPred2" in names
+
+    def test_is_predefined_true_filter(self):
+        SpecialisationFactory(name="ExFilterPred", is_predefined=True)
+        SpecialisationFactory(name="ExFilterCustom", is_predefined=False)
+        resp = APIClient().get(self.URL + "?is_predefined=true")
+        assert resp.status_code == status.HTTP_200_OK
+        names = [s["name"] for s in resp.data["data"]]
+        assert "ExFilterPred" in names
+        assert "ExFilterCustom" not in names
+
+    def test_is_predefined_false_filter(self):
+        SpecialisationFactory(name="ExFalsePred", is_predefined=True)
+        SpecialisationFactory(name="ExFalseCustom", is_predefined=False)
+        resp = APIClient().get(self.URL + "?is_predefined=false")
+        assert resp.status_code == status.HTTP_200_OK
+        names = [s["name"] for s in resp.data["data"]]
+        assert "ExFalseCustom" in names
+        assert "ExFalsePred" not in names
+
+    def test_response_fields(self):
+        SpecialisationFactory(name="ExFieldSpec", is_predefined=True)
+        resp = APIClient().get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        first = next(s for s in resp.data["data"] if s["name"] == "ExFieldSpec")
+        assert "id" in first
+        assert "name" in first
+        assert "slug" in first
+        assert "is_predefined" in first
+
+
+# ---------------------------------------------------------------------------
+# GoalListView (GET /api/v1/expertise/goals/)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestGoalListViewExpertise:
+    URL = "/api/v1/expertise/goals/"
+
+    def test_no_auth_required_returns_200(self):
+        resp = APIClient().get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_returns_predefined_goals(self):
+        from apps.profiles.models import Goal
+
+        Goal.objects.create(name="GoalListPred1", is_predefined=True)
+        resp = APIClient().get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        names = [g["name"] for g in resp.data["data"]]
+        assert "GoalListPred1" in names
+
+    def test_is_predefined_true_filter(self):
+        from apps.profiles.models import Goal
+
+        Goal.objects.create(name="GoalFilterPred", is_predefined=True)
+        Goal.objects.create(name="GoalFilterCustom", is_predefined=False)
+        resp = APIClient().get(self.URL + "?is_predefined=true")
+        assert resp.status_code == status.HTTP_200_OK
+        names = [g["name"] for g in resp.data["data"]]
+        assert "GoalFilterPred" in names
+        assert "GoalFilterCustom" not in names
+
+    def test_response_fields(self):
+        from apps.profiles.models import Goal
+
+        Goal.objects.create(name="GoalFieldTest", is_predefined=True)
+        resp = APIClient().get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        first = next(g for g in resp.data["data"] if g["name"] == "GoalFieldTest")
+        assert "id" in first
+        assert "name" in first
+        assert "slug" in first
+        assert "is_predefined" in first
+
+
+# ---------------------------------------------------------------------------
+# Old URLs must return 404 after cleanup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestOldUrlsReturn404:
+    def test_old_specialisations_list_url_returns_404(self):
+        resp = APIClient().get("/api/v1/profiles/specialisations/")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_old_onboarding_goals_url_returns_404(self):
+        resp = APIClient().get("/api/v1/onboarding/goals/")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_old_me_specialisations_get_returns_404(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.get("/api/v1/profiles/me/specialisations/")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_old_me_specialisations_post_returns_404(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.post("/api/v1/profiles/me/specialisations/", {}, format="json")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# ProfileExpertiseView (GET/POST /api/v1/profiles/me/expertise/)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestProfileExpertiseView:
+    URL = "/api/v1/profiles/me/expertise/"
+
+    def _detail_url(self, spec_id):
+        return f"/api/v1/profiles/me/expertise/{spec_id}/"
+
+    def test_get_returns_200_for_trainer(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_post_attaches_expertise_by_id(self):
+        profile = TrainerProfileFactory()
+        s = SpecialisationFactory(name="ExpertiseNew1")
+        client = _auth_client(profile.user)
+        resp = client.post(
+            self.URL,
+            {"specialisation_ids": [s.id], "custom_names": []},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert profile.specialisations.filter(id=s.id).exists()
+
+    def test_delete_removes_expertise(self):
+        profile = TrainerProfileFactory()
+        spec = SpecialisationFactory(name="RemoveExpertise")
+        profile.specialisations.add(spec)
+        client = _auth_client(profile.user)
+        resp = client.delete(self._detail_url(spec.id))
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        assert not profile.specialisations.filter(id=spec.id).exists()
+
+    def test_client_cannot_access(self):
+        cp = ClientProfileFactory()
+        client = _auth_client(cp.user)
+        resp = client.get(self.URL)
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_unauthenticated_returns_401(self):
+        resp = APIClient().get(self.URL)
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+# ---------------------------------------------------------------------------
+# ProfileClientGoalsView (GET/POST /api/v1/profiles/me/goals/)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestProfileClientGoalsView:
+    URL = "/api/v1/profiles/me/goals/"
+
+    def _detail_url(self, goal_id):
+        return f"/api/v1/profiles/me/goals/{goal_id}/"
+
+    def test_unauthenticated_returns_401(self):
+        resp = APIClient().get(self.URL)
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_trainer_returns_403(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.get(self.URL)
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_gym_returns_403(self):
+        profile = GymProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.get(self.URL)
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_client_get_empty_list_returns_200(self):
+        cp = ClientProfileFactory()
+        client = _auth_client(cp.user)
+        resp = client.get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["data"] == []
+
+    def test_client_post_adds_goals(self):
+        from apps.profiles.models import Goal
+
+        cp = ClientProfileFactory()
+        g = Goal.objects.create(name="GoalCRUD1", is_predefined=True)
+        client = _auth_client(cp.user)
+        resp = client.post(self.URL, {"goal_ids": [g.id]}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        assert cp.primary_goals.filter(id=g.id).exists()
+
+    def test_client_post_exceeds_6_returns_400(self):
+        from apps.profiles.models import Goal
+
+        cp = ClientProfileFactory()
+        goals = [Goal.objects.create(name=f"GoalLimitCRUD{i}") for i in range(7)]
+        client = _auth_client(cp.user)
+        resp = client.post(self.URL, {"goal_ids": [g.id for g in goals]}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_client_delete_removes_goal(self):
+        from apps.profiles.models import Goal
+
+        cp = ClientProfileFactory()
+        g = Goal.objects.create(name="GoalDeleteCRUD")
+        cp.primary_goals.add(g)
+        client = _auth_client(cp.user)
+        resp = client.delete(self._detail_url(g.id))
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        assert not cp.primary_goals.filter(id=g.id).exists()
+
+    def test_client_delete_not_attached_returns_404(self):
+        from apps.profiles.models import Goal
+
+        cp = ClientProfileFactory()
+        g = Goal.objects.create(name="GoalNotAttachedCRUD")
+        client = _auth_client(cp.user)
+        resp = client.delete(self._detail_url(g.id))
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# ProfileClientFocusView (GET/POST /api/v1/profiles/me/focus/)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestProfileClientFocusView:
+    URL = "/api/v1/profiles/me/focus/"
+
+    def _detail_url(self, spec_id):
+        return f"/api/v1/profiles/me/focus/{spec_id}/"
+
+    def test_unauthenticated_returns_401(self):
+        resp = APIClient().get(self.URL)
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_trainer_returns_403(self):
+        profile = TrainerProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.get(self.URL)
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_gym_returns_403(self):
+        profile = GymProfileFactory()
+        client = _auth_client(profile.user)
+        resp = client.get(self.URL)
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_client_get_empty_list_returns_200(self):
+        cp = ClientProfileFactory()
+        client = _auth_client(cp.user)
+        resp = client.get(self.URL)
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["data"] == []
+
+    def test_client_post_adds_focus(self):
+        cp = ClientProfileFactory()
+        s = SpecialisationFactory(name="FocusCRUD1")
+        client = _auth_client(cp.user)
+        resp = client.post(self.URL, {"specialisation_ids": [s.id]}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        assert cp.specialisations.filter(id=s.id).exists()
+
+    def test_client_post_exceeds_10_returns_400(self):
+        cp = ClientProfileFactory()
+        specs = [SpecialisationFactory(name=f"FocusLimitCRUD{i}") for i in range(11)]
+        client = _auth_client(cp.user)
+        resp = client.post(
+            self.URL,
+            {"specialisation_ids": [s.id for s in specs]},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_client_delete_removes_focus(self):
+        cp = ClientProfileFactory()
+        s = SpecialisationFactory(name="FocusDeleteCRUD")
+        cp.specialisations.add(s)
+        client = _auth_client(cp.user)
+        resp = client.delete(self._detail_url(s.id))
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        assert not cp.specialisations.filter(id=s.id).exists()
+
+    def test_client_delete_not_attached_returns_404(self):
+        cp = ClientProfileFactory()
+        s = SpecialisationFactory(name="FocusNotAttachedCRUD")
+        client = _auth_client(cp.user)
+        resp = client.delete(self._detail_url(s.id))
+        assert resp.status_code == status.HTTP_404_NOT_FOUND

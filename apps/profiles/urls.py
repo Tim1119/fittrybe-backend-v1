@@ -12,16 +12,19 @@ from apps.profiles.views import (
     ProfileAvailabilityListCreateView,
     ProfileCertificationDetailView,
     ProfileCertificationListCreateView,
+    ProfileClientFocusDetailView,
+    ProfileClientFocusView,
+    ProfileClientGoalDetailView,
+    ProfileClientGoalsView,
+    ProfileExpertiseDetailView,
+    ProfileExpertiseView,
     ProfilePhotoUploadView,
     ProfileSearchView,
     ProfileServiceDetailView,
     ProfileServiceListCreateView,
-    ProfileSpecialisationDetailView,
-    ProfileSpecialisationView,
     ProfileVisibilityView,
     PublicGymProfileView,
     PublicTrainerProfileView,
-    SpecialisationListView,
     TrainerReviewListCreateView,
     TrainerReviewRespondView,
 )
@@ -31,16 +34,38 @@ app_name = "profiles"
 urlpatterns = [
     path("me/", MyProfileView.as_view(), name="my-profile"),
     path("me/visibility/", ProfileVisibilityView.as_view(), name="profile-visibility"),
-    # Specialisations
+    # Expertise (trainer/gym)
     path(
-        "me/specialisations/",
-        ProfileSpecialisationView.as_view(),
-        name="my-specialisations",
+        "me/expertise/",
+        ProfileExpertiseView.as_view(),
+        name="my-expertise",
     ),
     path(
-        "me/specialisations/<int:specialisation_id>/",
-        ProfileSpecialisationDetailView.as_view(),
-        name="my-specialisation-detail",
+        "me/expertise/<int:specialisation_id>/",
+        ProfileExpertiseDetailView.as_view(),
+        name="my-expertise-detail",
+    ),
+    # Client goals
+    path(
+        "me/goals/",
+        ProfileClientGoalsView.as_view(),
+        name="my-goals",
+    ),
+    path(
+        "me/goals/<int:goal_id>/",
+        ProfileClientGoalDetailView.as_view(),
+        name="my-goal-detail",
+    ),
+    # Client focus
+    path(
+        "me/focus/",
+        ProfileClientFocusView.as_view(),
+        name="my-focus",
+    ),
+    path(
+        "me/focus/<int:specialisation_id>/",
+        ProfileClientFocusDetailView.as_view(),
+        name="my-focus-detail",
     ),
     # Services
     path(
@@ -77,7 +102,6 @@ urlpatterns = [
     ),
     path("photo/", ProfilePhotoUploadView.as_view(), name="photo-upload"),
     path("cover/", CoverPhotoUploadView.as_view(), name="cover-upload"),
-    path("specialisations/", SpecialisationListView.as_view(), name="specialisations"),
     path("search/", ProfileSearchView.as_view(), name="search"),
     path(
         "trainer/<slug:slug>/",

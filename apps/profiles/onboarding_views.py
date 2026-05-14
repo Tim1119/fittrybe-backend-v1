@@ -6,7 +6,7 @@ from django.db import transaction
 from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -48,12 +48,13 @@ def _client_profile(user):
 
 
 @extend_schema(
-    summary="Get or set trainer expertise (onboarding step 1)",
+    summary="Get expertise options for onboarding picker (trainer step 1)",
     description=(
-        "GET — returns specialisations currently attached to the trainer's profile.\n\n"
-        "POST — attaches specialisations (expertise) to the trainer's profile. "
-        "Additive. Max 10 total. "
-        "Advances onboarding_step to 1 and sets onboarding_status to in_progress."
+        "GET — returns all available expertise options for the picker screen. "
+        "Use ?is_predefined=true for predefined options only.\n"
+        "POST — attaches selected expertise to the trainer profile and advances "
+        "onboarding to step 1.\n"
+        "Body: {expertise_ids: [1,2,3], custom_names: ['Optional custom expertise']}"
     ),
     request=inline_serializer(
         name="TrainerExpertiseRequest",
@@ -82,20 +83,15 @@ class TrainerExpertiseView(APIView):
     permission_classes = [IsAuthenticated, IsTrainer]
 
     def get(self, request):
-        profile = _trainer_profile(request.user)
-        if not profile:
-            return APIResponse.error(
-                message="Profile not found.",
-                code=ErrorCode.NOT_FOUND,
-                status_code=404,
-            )
+        qs = Specialisation.objects.all().order_by("name")
+        is_predefined = request.query_params.get("is_predefined")
+        if is_predefined == "true":
+            qs = qs.filter(is_predefined=True)
+        elif is_predefined == "false":
+            qs = qs.filter(is_predefined=False)
         return APIResponse.success(
-            data={
-                "expertise": SpecialisationSerializer(
-                    profile.specialisations.all(), many=True
-                ).data
-            },
-            message="Expertise retrieved.",
+            data={"expertise": SpecialisationSerializer(qs, many=True).data},
+            message="Expertise options retrieved.",
         )
 
     def post(self, request):
@@ -229,9 +225,9 @@ class TrainerProductsView(APIView):
 
 
 @extend_schema(
-    summary="Get or set gym services (onboarding step 1)",
+    summary="Get service options and current services (gym onboarding step 1)",
     description=(
-        "GET — returns current services for the gym.\n\n"
+        "GET — returns session_type picker options and the gym's current services.\n\n"
         "POST — replaces all services and advances onboarding_step to 1."
     ),
     request=inline_serializer(
@@ -268,6 +264,12 @@ class TrainerProductsView(APIView):
 class GymServicesView(APIView):
     permission_classes = [IsAuthenticated, IsGym]
 
+    SESSION_TYPE_OPTIONS = [
+        {"value": "physical", "label": "Physical"},
+        {"value": "virtual", "label": "Virtual"},
+        {"value": "both", "label": "Both"},
+    ]
+
     def get(self, request):
         profile = _gym_profile(request.user)
         if not profile:
@@ -278,7 +280,10 @@ class GymServicesView(APIView):
             )
         return APIResponse.success(
             data={
-                "services": ServiceSerializer(profile.services.all(), many=True).data
+                "session_type_options": self.SESSION_TYPE_OPTIONS,
+                "current_services": ServiceSerializer(
+                    profile.services.all(), many=True
+                ).data,
             },
             message="Services retrieved.",
         )
@@ -400,10 +405,12 @@ class GymProductsView(APIView):
 
 
 @extend_schema(
-    summary="Get or set client primary goals (onboarding step 1)",
+    summary="Get goal options for onboarding picker (client step 1)",
     description=(
-        "GET — returns goals currently attached to the client's profile.\n\n"
-        "POST — attaches goals to the client's profile. Additive. Max 6 total."
+        "GET — returns all available goal options for the picker screen.\n"
+        "POST — attaches selected goals to the client profile and advances "
+        "onboarding to step 1.\n"
+        "Body: {goal_ids: [1,2], custom_names: ['Optional custom goal']}"
     ),
     request=inline_serializer(
         name="ClientGoalRequest",
@@ -428,16 +435,15 @@ class ClientGoalView(APIView):
     permission_classes = [IsAuthenticated, IsClient]
 
     def get(self, request):
-        profile = _client_profile(request.user)
-        if not profile:
-            return APIResponse.error(
-                message="Profile not found.",
-                code=ErrorCode.NOT_FOUND,
-                status_code=404,
-            )
+        qs = Goal.objects.all().order_by("name")
+        is_predefined = request.query_params.get("is_predefined")
+        if is_predefined == "true":
+            qs = qs.filter(is_predefined=True)
+        elif is_predefined == "false":
+            qs = qs.filter(is_predefined=False)
         return APIResponse.success(
-            data={"goals": GoalSerializer(profile.primary_goals.all(), many=True).data},
-            message="Goals retrieved.",
+            data={"goals": GoalSerializer(qs, many=True).data},
+            message="Goal options retrieved.",
         )
 
     def post(self, request):
@@ -531,11 +537,12 @@ class ClientGoalDetailView(APIView):
 
 
 @extend_schema(
-    summary="Get or set client focus areas (onboarding step 2)",
+    summary="Get focus area options for onboarding picker (client step 2)",
     description=(
-        "GET — returns specialisations currently attached to the client's profile.\n\n"
-        "POST — attaches specialisations (focus areas) to the client's profile. "
-        "Additive. Max 10 total. Completes onboarding."
+        "GET — returns all available focus area options for the picker screen.\n"
+        "POST — attaches selected focus areas to the client profile and completes "
+        "onboarding.\n"
+        "Body: {specialisation_ids: [1,2,3], custom_names: ['Optional custom focus']}"
     ),
     request=inline_serializer(
         name="ClientFocusRequest",
@@ -560,20 +567,15 @@ class ClientFocusView(APIView):
     permission_classes = [IsAuthenticated, IsClient]
 
     def get(self, request):
-        profile = _client_profile(request.user)
-        if not profile:
-            return APIResponse.error(
-                message="Profile not found.",
-                code=ErrorCode.NOT_FOUND,
-                status_code=404,
-            )
+        qs = Specialisation.objects.all().order_by("name")
+        is_predefined = request.query_params.get("is_predefined")
+        if is_predefined == "true":
+            qs = qs.filter(is_predefined=True)
+        elif is_predefined == "false":
+            qs = qs.filter(is_predefined=False)
         return APIResponse.success(
-            data={
-                "specialisations": SpecialisationSerializer(
-                    profile.specialisations.all(), many=True
-                ).data
-            },
-            message="Focus areas retrieved.",
+            data={"focus_areas": SpecialisationSerializer(qs, many=True).data},
+            message="Focus area options retrieved.",
         )
 
     def post(self, request):
@@ -658,28 +660,3 @@ class ClientFocusDetailView(APIView):
 
         profile.specialisations.remove(spec)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-# ---------------------------------------------------------------------------
-# Goals list (public picker)
-# ---------------------------------------------------------------------------
-
-
-@extend_schema(
-    summary="List all goals (for client goal picker)",
-    description="Returns all Goal objects. Public endpoint — no auth required.",
-    responses={
-        200: OpenApiResponse(description="List of goals"),
-    },
-    tags=["Onboarding"],
-    auth=[],
-)
-class GoalListView(APIView):
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        goals = Goal.objects.all()
-        return APIResponse.success(
-            data=GoalSerializer(goals, many=True).data,
-            message="Goals retrieved.",
-        )
