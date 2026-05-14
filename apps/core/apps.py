@@ -21,6 +21,7 @@ class CoreConfig(AppConfig):
             "test",
             "collectstatic",
             "showmigrations",
+            "axes_reset",
         }
         if len(sys.argv) > 1 and sys.argv[1] in skip_commands:
             return
