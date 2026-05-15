@@ -2,25 +2,19 @@
 Tests for accounts views (auth endpoints).
 """
 
+from datetime import timedelta
+from unittest.mock import patch
+
 import pytest
-from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_encode
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.emails import account_token_generator
+from apps.accounts.models import OTPCode, generate_otp
 from apps.accounts.tests.factories import UnverifiedUserFactory, UserFactory
 
 STRONG = "F1tTryb3!#2025"
-
-
-def make_uid_token(user, generator=None):
-    g = generator or account_token_generator
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
-    token = g.make_token(user)
-    return uid, token
 
 
 @pytest.fixture
@@ -120,7 +114,7 @@ class TestRegisterView:
     def test_register_sends_email(self, api_client, mailoutbox):
         api_client.post(self.URL, self._payload(), format="json")
         assert len(mailoutbox) == 1
-        assert "Verify" in mailoutbox[0].subject
+        assert "verif" in mailoutbox[0].subject.lower()
 
     # --- terms_accepted validation ---
 
@@ -381,29 +375,37 @@ class TestRegisterView:
 
 
 # ---------------------------------------------------------------------------
-# Email verification
+# Email verification (OTP-based)
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
 class TestVerifyEmailView:
-    URL = "/api/v1/auth/verify-email/"
+    """Legacy name kept — now tests the OTP-based verify-otp/ endpoint."""
 
-    def test_valid_uid_and_token_returns_200(self, api_client):
+    URL = "/api/v1/auth/verify-otp/"
+
+    def test_valid_code_returns_200(self, api_client):
         user = UnverifiedUserFactory()
-        uid, token = make_uid_token(user)
-        resp = api_client.get(self.URL, {"uid": uid, "token": token})
+        otp = generate_otp(user, OTPCode.Purpose.EMAIL_VERIFICATION)
+        resp = api_client.post(
+            self.URL, {"email": user.email, "code": otp.code}, format="json"
+        )
         assert resp.status_code == status.HTTP_200_OK
         user.refresh_from_db()
         assert user.is_active is True
         assert user.is_email_verified is True
 
-    def test_invalid_token_returns_400(self, api_client):
+    def test_invalid_code_returns_400(self, api_client):
         user = UnverifiedUserFactory()
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        resp = api_client.get(self.URL, {"uid": uid, "token": "badtoken"})
+        generate_otp(user, OTPCode.Purpose.EMAIL_VERIFICATION)
+        resp = api_client.post(
+            self.URL, {"email": user.email, "code": "000000"}, format="json"
+        )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_invalid_uid_returns_400(self, api_client):
-        resp = api_client.get(self.URL, {"uid": "notbase64!!", "token": "abc"})
+    def test_unknown_email_returns_400(self, api_client):
+        resp = api_client.post(
+            self.URL, {"email": "ghost@nowhere.com", "code": "123456"}, format="json"
+        )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -565,22 +567,22 @@ class TestForgotPasswordView:
 
 
 # ---------------------------------------------------------------------------
-# Reset password
+# Reset password (OTP-based)
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
 class TestResetPasswordView:
+    """Legacy name kept — now tests the OTP-based reset-password/ endpoint."""
+
     URL = "/api/v1/auth/reset-password/"
 
-    def test_valid_token_returns_200(self, api_client):
+    def test_valid_otp_returns_200(self, api_client):
         user = UserFactory()
-        gen = PasswordResetTokenGenerator()
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = gen.make_token(user)
+        otp = generate_otp(user, OTPCode.Purpose.PASSWORD_RESET)
         resp = api_client.post(
             self.URL,
             {
-                "uid": uid,
-                "token": token,
+                "email": user.email,
+                "code": otp.code,
                 "new_password": STRONG,
                 "confirm_password": STRONG,
             },
@@ -588,14 +590,14 @@ class TestResetPasswordView:
         )
         assert resp.status_code == status.HTTP_200_OK
 
-    def test_invalid_token_returns_400(self, api_client):
+    def test_invalid_code_returns_400(self, api_client):
         user = UserFactory()
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        generate_otp(user, OTPCode.Purpose.PASSWORD_RESET)
         resp = api_client.post(
             self.URL,
             {
-                "uid": uid,
-                "token": "invalidtoken",
+                "email": user.email,
+                "code": "000000",
                 "new_password": STRONG,
                 "confirm_password": STRONG,
             },
@@ -691,31 +693,31 @@ class TestCompleteOnboardingView:
 
 
 # ---------------------------------------------------------------------------
-# Resend verification email
+# Resend OTP (renamed from TestResendVerificationView)
 # ---------------------------------------------------------------------------
 @pytest.mark.django_db
-class TestResendVerificationView:
-    URL = "/api/v1/auth/resend-verification/"
+class TestResendOTPView:
+    URL = "/api/v1/auth/resend-otp/"
 
     def test_unverified_email_returns_200_and_fires_task(self, api_client):
-        from unittest.mock import patch
-
-        from apps.accounts.tests.factories import UnverifiedUserFactory
-
         user = UnverifiedUserFactory(email="unverified@example.com", is_active=True)
-        with patch("apps.accounts.views.send_verification_email_task.delay") as task:
+        with patch(
+            "apps.accounts.views.send_otp_verification_email_task.delay"
+        ) as task:
             resp = api_client.post(
-                self.URL, {"email": "unverified@example.com"}, format="json"
+                self.URL,
+                {"email": "unverified@example.com", "purpose": "email_verification"},
+                format="json",
             )
             assert resp.status_code == status.HTTP_200_OK
             task.assert_called_once_with(str(user.id))
 
     def test_already_verified_email_returns_400(self, api_client):
-        from apps.accounts.tests.factories import UserFactory
-
         UserFactory(email="verified@example.com")
         resp = api_client.post(
-            self.URL, {"email": "verified@example.com"}, format="json"
+            self.URL,
+            {"email": "verified@example.com", "purpose": "email_verification"},
+            format="json",
         )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
         assert "already verified" in resp.data["message"].lower()
@@ -728,9 +730,44 @@ class TestResendVerificationView:
         resp = api_client.post(self.URL, {}, format="json")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_invalid_email_format_returns_400(self, api_client):
-        resp = api_client.post(self.URL, {"email": "not-an-email"}, format="json")
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    def test_cooldown_within_60_seconds_returns_429(self, api_client):
+        user = UnverifiedUserFactory(email="cool@example.com", is_active=True)
+        generate_otp(user, OTPCode.Purpose.EMAIL_VERIFICATION)
+        resp = api_client.post(
+            self.URL,
+            {"email": "cool@example.com", "purpose": "email_verification"},
+            format="json",
+        )
+        assert resp.status_code == 429
+
+    def test_cooldown_expired_returns_200(self, api_client):
+        user = UnverifiedUserFactory(email="cool2@example.com", is_active=True)
+        otp = generate_otp(user, OTPCode.Purpose.EMAIL_VERIFICATION)
+        otp.created_at = timezone.now() - timedelta(seconds=61)
+        otp.save(update_fields=["created_at"])
+        with patch(
+            "apps.accounts.views.send_otp_verification_email_task.delay"
+        ) as task:
+            resp = api_client.post(
+                self.URL,
+                {"email": "cool2@example.com", "purpose": "email_verification"},
+                format="json",
+            )
+            assert resp.status_code == status.HTTP_200_OK
+            task.assert_called_once_with(str(user.id))
+
+    def test_password_reset_purpose_returns_200(self, api_client):
+        user = UserFactory(email="reset@example.com")
+        with patch(
+            "apps.accounts.views.send_otp_password_reset_email_task.delay"
+        ) as task:
+            resp = api_client.post(
+                self.URL,
+                {"email": "reset@example.com", "purpose": "password_reset"},
+                format="json",
+            )
+            assert resp.status_code == status.HTTP_200_OK
+            task.assert_called_once_with(str(user.id))
 
 
 # ---------------------------------------------------------------------------
@@ -799,3 +836,225 @@ class TestLoginOnboardingResponse:
         assert resp.status_code == status.HTTP_200_OK
         assert "is_profile_published" in resp.data["data"]["onboarding"]
         assert resp.data["data"]["onboarding"]["is_profile_published"] is False
+
+
+# ---------------------------------------------------------------------------
+# OTP: Verify email with OTP (comprehensive)
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+class TestVerifyOTPView:
+    URL = "/api/v1/auth/verify-otp/"
+
+    def test_missing_email_returns_400(self, api_client):
+        resp = api_client.post(self.URL, {"code": "123456"}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_missing_code_returns_400(self, api_client):
+        resp = api_client.post(self.URL, {"email": "test@example.com"}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unknown_email_returns_400(self, api_client):
+        resp = api_client.post(
+            self.URL, {"email": "ghost@nowhere.com", "code": "123456"}, format="json"
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_wrong_code_returns_400(self, api_client):
+        user = UnverifiedUserFactory()
+        generate_otp(user, OTPCode.Purpose.EMAIL_VERIFICATION)
+        resp = api_client.post(
+            self.URL, {"email": user.email, "code": "000000"}, format="json"
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_expired_otp_returns_400(self, api_client):
+        user = UnverifiedUserFactory()
+        otp = generate_otp(user, OTPCode.Purpose.EMAIL_VERIFICATION)
+        otp.expires_at = timezone.now() - timedelta(minutes=1)
+        otp.save(update_fields=["expires_at"])
+        resp = api_client.post(
+            self.URL, {"email": user.email, "code": otp.code}, format="json"
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_correct_code_verifies_user(self, api_client):
+        user = UnverifiedUserFactory()
+        otp = generate_otp(user, OTPCode.Purpose.EMAIL_VERIFICATION)
+        resp = api_client.post(
+            self.URL, {"email": user.email, "code": otp.code}, format="json"
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        user.refresh_from_db()
+        assert user.is_email_verified is True
+        assert user.is_active is True
+
+    def test_correct_code_creates_trial_for_trainer(self, api_client):
+        from apps.accounts.tests.factories import TrainerFactory
+
+        user = TrainerFactory(is_active=False, is_email_verified=False)
+        otp = generate_otp(user, OTPCode.Purpose.EMAIL_VERIFICATION)
+        with patch("apps.subscriptions.utils.create_trial_subscription") as mock_trial:
+            resp = api_client.post(
+                self.URL, {"email": user.email, "code": otp.code}, format="json"
+            )
+        assert resp.status_code == status.HTTP_200_OK
+        mock_trial.assert_called_once_with(user)
+
+    def test_already_verified_returns_400(self, api_client):
+        user = UserFactory()
+        otp = generate_otp(user, OTPCode.Purpose.EMAIL_VERIFICATION)
+        resp = api_client.post(
+            self.URL, {"email": user.email, "code": otp.code}, format="json"
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "already verified" in resp.data["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# OTP: Forgot password (OTP-specific tests)
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+class TestForgotPasswordOTP:
+    URL = "/api/v1/auth/forgot-password/"
+
+    def test_verified_email_returns_200_and_fires_otp_task(self, api_client):
+        user = UserFactory()
+        with patch(
+            "apps.accounts.views.send_otp_password_reset_email_task.delay"
+        ) as task:
+            resp = api_client.post(self.URL, {"email": user.email}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        task.assert_called_once_with(str(user.id))
+
+    def test_unknown_email_returns_200_no_leak(self, api_client):
+        resp = api_client.post(self.URL, {"email": "nobody@nowhere.com"}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_unverified_email_returns_200_but_task_not_fired(self, api_client):
+        user = UnverifiedUserFactory()
+        with patch(
+            "apps.accounts.views.send_otp_password_reset_email_task.delay"
+        ) as task:
+            resp = api_client.post(self.URL, {"email": user.email}, format="json")
+        assert resp.status_code == status.HTTP_200_OK
+        task.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# OTP: Reset password with OTP (comprehensive)
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+class TestResetPasswordOTPView:
+    URL = "/api/v1/auth/reset-password/"
+
+    def test_missing_fields_returns_400(self, api_client):
+        resp = api_client.post(self.URL, {"email": "x@example.com"}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_wrong_code_returns_400(self, api_client):
+        user = UserFactory()
+        generate_otp(user, OTPCode.Purpose.PASSWORD_RESET)
+        resp = api_client.post(
+            self.URL,
+            {
+                "email": user.email,
+                "code": "000000",
+                "new_password": STRONG,
+                "confirm_password": STRONG,
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_expired_code_returns_400(self, api_client):
+        user = UserFactory()
+        otp = generate_otp(user, OTPCode.Purpose.PASSWORD_RESET)
+        otp.expires_at = timezone.now() - timedelta(minutes=1)
+        otp.save(update_fields=["expires_at"])
+        resp = api_client.post(
+            self.URL,
+            {
+                "email": user.email,
+                "code": otp.code,
+                "new_password": STRONG,
+                "confirm_password": STRONG,
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_mismatched_passwords_returns_400(self, api_client):
+        user = UserFactory()
+        otp = generate_otp(user, OTPCode.Purpose.PASSWORD_RESET)
+        resp = api_client.post(
+            self.URL,
+            {
+                "email": user.email,
+                "code": otp.code,
+                "new_password": STRONG,
+                "confirm_password": "DifferentPass!99",
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_weak_password_returns_400(self, api_client):
+        user = UserFactory()
+        otp = generate_otp(user, OTPCode.Purpose.PASSWORD_RESET)
+        resp = api_client.post(
+            self.URL,
+            {
+                "email": user.email,
+                "code": otp.code,
+                "new_password": "password",
+                "confirm_password": "password",
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_valid_otp_resets_password(self, api_client):
+        user = UserFactory()
+        otp = generate_otp(user, OTPCode.Purpose.PASSWORD_RESET)
+        resp = api_client.post(
+            self.URL,
+            {
+                "email": user.email,
+                "code": otp.code,
+                "new_password": STRONG,
+                "confirm_password": STRONG,
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        user.refresh_from_db()
+        assert user.check_password(STRONG)
+
+    def test_valid_otp_sends_password_changed_email(self, api_client, mailoutbox):
+        user = UserFactory()
+        otp = generate_otp(user, OTPCode.Purpose.PASSWORD_RESET)
+        api_client.post(
+            self.URL,
+            {
+                "email": user.email,
+                "code": otp.code,
+                "new_password": STRONG,
+                "confirm_password": STRONG,
+            },
+            format="json",
+        )
+        subjects = [m.subject for m in mailoutbox]
+        assert any("password" in s.lower() for s in subjects)
+
+    def test_already_used_code_returns_400(self, api_client):
+        user = UserFactory()
+        otp = generate_otp(user, OTPCode.Purpose.PASSWORD_RESET)
+        payload = {
+            "email": user.email,
+            "code": otp.code,
+            "new_password": STRONG,
+            "confirm_password": STRONG,
+        }
+        api_client.post(self.URL, payload, format="json")
+        resp = api_client.post(self.URL, payload, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST

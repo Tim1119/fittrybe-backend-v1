@@ -364,6 +364,62 @@ def send_gym_trainer_invite_email(user, gym_profile):
     email.send(fail_silently=False)
 
 
+def send_otp_verification_email(user, otp_code):
+    context = {
+        "user": user,
+        "user_name": get_user_name(user),
+        "user_role": user.role,
+        "otp_code": otp_code,
+        "expires_minutes": 10,
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": _logo_url(),
+    }
+    html_content = render_to_string("accounts/emails/verify_email_otp.html", context)
+    text_content = (
+        f"Hi {get_user_name(user)},\n\n"
+        f"Your Fit Trybe verification code is:\n\n"
+        f"  {otp_code}\n\n"
+        f"This code expires in 10 minutes.\n"
+        f"If you did not request this, please ignore this email."
+    )
+    email = EmailMultiAlternatives(
+        subject="Your Fit Trybe verification code",
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
+
+
+def send_otp_password_reset_email(user, otp_code):
+    context = {
+        "user": user,
+        "user_name": get_user_name(user),
+        "user_email": user.email,
+        "otp_code": otp_code,
+        "expires_minutes": 10,
+        "frontend_url": settings.FRONTEND_URL,
+        "logo_url": _logo_url(),
+    }
+    html_content = render_to_string("accounts/emails/password_reset_otp.html", context)
+    text_content = (
+        f"Hi {get_user_name(user)},\n\n"
+        f"Your Fit Trybe password reset code is:\n\n"
+        f"  {otp_code}\n\n"
+        f"This code expires in 10 minutes.\n"
+        f"If you did not request this, please ignore this email."
+    )
+    email = EmailMultiAlternatives(
+        subject="Your Fit Trybe password reset code",
+        body=text_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send(fail_silently=False)
+
+
 def send_password_changed_email(user):
     token = PasswordResetTokenGenerator().make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))

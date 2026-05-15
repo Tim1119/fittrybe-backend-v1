@@ -5,18 +5,10 @@ Accounts views — authentication endpoints.
 import logging
 
 from axes.handlers.proxy import AxesProxyHandler
-from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils import timezone
 from django.utils.decorators import method_decorator
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
 from django_ratelimit.decorators import ratelimit
-from drf_spectacular.utils import (
-    OpenApiParameter,
-    OpenApiResponse,
-    extend_schema,
-    inline_serializer,
-)
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -27,12 +19,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.views import TokenRefreshView as _TokenRefreshView
 
-from apps.accounts.emails import (
-    account_token_generator,
-    send_password_changed_email,
-    send_welcome_email,
-)
-from apps.accounts.models import User
+from apps.accounts.emails import send_password_changed_email, send_welcome_email
+from apps.accounts.models import OTPCode, User, generate_otp, verify_otp
 from apps.accounts.permissions import IsTrainerOrGym
 from apps.accounts.serializers import (
     ChangePasswordSerializer,
@@ -41,26 +29,17 @@ from apps.accounts.serializers import (
     ForgotPasswordSerializer,
     GymRegisterSerializer,
     RegisterSerializer,
-    ResetPasswordSerializer,
     TrainerRegisterSerializer,
     UserProfileSerializer,
 )
 from apps.accounts.tasks import (
-    send_password_reset_email_task,
-    send_verification_email_task,
+    send_otp_password_reset_email_task,
+    send_otp_verification_email_task,
 )
 from apps.core.error_codes import ErrorCode
 from apps.core.responses import APIResponse
 
 logger = logging.getLogger(__name__)
-
-
-def _decode_uid(uid):
-    """Decode a base64-encoded UID string. Returns the decoded string or None."""
-    try:
-        return force_str(urlsafe_base64_decode(uid))
-    except Exception:
-        return None
 
 
 def _get_onboarding_data(user, is_first_login):
@@ -139,7 +118,7 @@ _ROLE_SERIALIZER_MAP = {
     summary="Register a new user",
     description=(
         "Create a new trainer, gym, or client account. "
-        "Sends a verification email upon success. "
+        "Sends a 6-digit OTP verification code to the email address upon success. "
         "Rate limited to 5 registrations per hour per IP.\n\n"
         "**Role: `trainer`** — required fields: "
         "`email`, `password`, `confirm_password`, `full_name`, "
@@ -202,74 +181,73 @@ class RegisterView(APIView):
 
         user = serializer.save()
 
-        send_verification_email_task.delay(str(user.id))
+        send_otp_verification_email_task.delay(str(user.id))
 
         return APIResponse.created(
             data={"email": user.email, "role": user.role},
             message=(
-                "Registration successful. Please check your email to verify "
-                "your account."
+                "Registration successful. Please check your email for your "
+                "6-digit verification code."
             ),
         )
 
 
 @extend_schema(
-    summary="Verify email address",
+    summary="Verify email with OTP",
     description=(
-        "Confirm ownership of an email address using the uid and token "
-        "included in the verification link sent after registration. "
-        "Activates the account and starts the subscription trial for trainers and gyms."
+        "Submit the 6-digit code sent to the user's email after registration "
+        "to activate the account."
     ),
-    parameters=[
-        OpenApiParameter(
-            name="uid",
-            location=OpenApiParameter.QUERY,
-            description="Base64-encoded user ID from the verification email",
-            required=True,
-            type=str,
-        ),
-        OpenApiParameter(
-            name="token",
-            location=OpenApiParameter.QUERY,
-            description="Verification token from the email link",
-            required=True,
-            type=str,
-        ),
-    ],
+    request=inline_serializer(
+        name="VerifyOTPRequest",
+        fields={
+            "email": drf_serializers.EmailField(),
+            "code": drf_serializers.CharField(max_length=6),
+        },
+    ),
     responses={
         200: OpenApiResponse(description="Email verified — account activated"),
-        400: OpenApiResponse(description="Invalid uid, unknown user, or expired token"),
+        400: OpenApiResponse(
+            description="Invalid or expired code, or email already verified"
+        ),
     },
     tags=["Authentication"],
     auth=[],
 )
-class VerifyEmailView(APIView):
+class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
 
-    def get(self, request):
-        uid_param = request.query_params.get("uid", "")
-        token = request.query_params.get("token", "")
+    def post(self, request):
+        email = request.data.get("email", "").strip().lower()
+        code = request.data.get("code", "").strip()
 
-        uid = _decode_uid(uid_param)
-        if uid is None:
+        if not email or not code:
             return APIResponse.error(
-                message="Invalid verification link.",
-                code=ErrorCode.TOKEN_INVALID,
+                message="Email and code are required.",
+                code=ErrorCode.VALIDATION_ERROR,
                 status_code=400,
             )
 
         try:
-            user = User.objects.get(pk=uid)
-        except (User.DoesNotExist, Exception):
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
             return APIResponse.error(
-                message="Invalid verification link.",
+                message="Invalid code.",
                 code=ErrorCode.TOKEN_INVALID,
                 status_code=400,
             )
 
-        if not account_token_generator.check_token(user, token):
+        if user.is_email_verified:
             return APIResponse.error(
-                message="Verification link is invalid or has expired.",
+                message="Email is already verified. Please log in.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        otp, error = verify_otp(user, code, OTPCode.Purpose.EMAIL_VERIFICATION)
+        if error:
+            return APIResponse.error(
+                message=error,
                 code=ErrorCode.TOKEN_INVALID,
                 status_code=400,
             )
@@ -294,7 +272,7 @@ class VerifyEmailView(APIView):
             logger.exception("Failed to send welcome email to %s", user.email)
 
         return APIResponse.success(
-            message="Email verified successfully. Welcome to Fit Trybe!"
+            message="Email verified successfully. You can now log in."
         )
 
 
@@ -347,7 +325,7 @@ class LoginView(TokenObtainPairView):
                 return APIResponse.error(
                     message=(
                         "Please verify your email before logging in. "
-                        "Check your inbox for the verification link."
+                        "Check your inbox for the 6-digit verification code."
                     ),
                     code=ErrorCode.ACCOUNT_NOT_VERIFIED,
                     status_code=403,
@@ -437,7 +415,8 @@ class LogoutView(APIView):
 @extend_schema(
     summary="Forgot password",
     description=(
-        "Request a password reset link by email. "
+        "Request a password reset by email. "
+        "Sends a 6-digit OTP code to the email address for password reset. "
         "Always returns 200 regardless of whether the email exists, "
         "to prevent account enumeration attacks. "
         "Rate limited to 3 requests per hour per IP."
@@ -445,7 +424,7 @@ class LogoutView(APIView):
     request=ForgotPasswordSerializer,
     responses={
         200: OpenApiResponse(
-            description="Request accepted — reset email sent if the account exists"
+            description="Request accepted — reset code sent if the account exists"
         ),
         429: OpenApiResponse(description="Rate limit exceeded"),
     },
@@ -464,32 +443,42 @@ class ForgotPasswordView(APIView):
             email = serializer.validated_data["email"]
             try:
                 user = User.objects.get(email=email)
-                send_password_reset_email_task.delay(str(user.id))
+                if user.is_email_verified:
+                    send_otp_password_reset_email_task.delay(str(user.id))
             except User.DoesNotExist:
                 pass
 
         return APIResponse.success(
             message=(
                 "If this email exists, you will receive a password reset "
-                "link shortly."
+                "code shortly."
             )
         )
 
 
 @extend_schema(
-    summary="Reset password",
+    summary="Reset password with OTP",
     description=(
-        "Set a new password using the uid and token from the password reset email. "
-        "The token is single-use and expires after a short window. "
+        "Set a new password using the 6-digit OTP code sent to the email address "
+        "via POST /api/v1/auth/forgot-password/. "
+        "The code is single-use and expires after 10 minutes. "
         "Sends a confirmation email on success."
     ),
-    request=ResetPasswordSerializer,
+    request=inline_serializer(
+        name="ResetPasswordOTPRequest",
+        fields={
+            "email": drf_serializers.EmailField(),
+            "code": drf_serializers.CharField(max_length=6),
+            "new_password": drf_serializers.CharField(),
+            "confirm_password": drf_serializers.CharField(),
+        },
+    ),
     responses={
         200: OpenApiResponse(
             description="Password reset — user may now log in with new password"
         ),
         400: OpenApiResponse(
-            description="Invalid uid, unknown user, expired token, or weak password"
+            description="Invalid or expired code, passwords mismatch, or weak password"
         ),
     },
     tags=["Authentication"],
@@ -499,42 +488,53 @@ class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = ResetPasswordSerializer(data=request.data)
-        if not serializer.is_valid():
+        import zxcvbn as zxcvbn_lib
+
+        email = request.data.get("email", "").strip().lower()
+        code = request.data.get("code", "").strip()
+        new_password = request.data.get("new_password", "")
+        confirm_password = request.data.get("confirm_password", "")
+
+        if not all([email, code, new_password, confirm_password]):
             return APIResponse.error(
-                message="Password reset failed.",
-                errors=serializer.errors,
+                message="email, code, new_password and confirm_password are required.",
                 code=ErrorCode.VALIDATION_ERROR,
                 status_code=400,
             )
 
-        uid = _decode_uid(serializer.validated_data["uid"])
-        token = serializer.validated_data["token"]
-
-        if uid is None:
+        if new_password != confirm_password:
             return APIResponse.error(
-                message="Invalid reset link.",
-                code=ErrorCode.TOKEN_INVALID,
+                message="Passwords do not match.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
+
+        result = zxcvbn_lib.zxcvbn(new_password)
+        if result["score"] < 2:
+            return APIResponse.error(
+                message="Password is too weak. Please choose a stronger password.",
+                code=ErrorCode.VALIDATION_ERROR,
                 status_code=400,
             )
 
         try:
-            user = User.objects.get(pk=uid)
-        except (User.DoesNotExist, Exception):
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
             return APIResponse.error(
-                message="Invalid reset link.",
+                message="Invalid code.",
                 code=ErrorCode.TOKEN_INVALID,
                 status_code=400,
             )
 
-        if not PasswordResetTokenGenerator().check_token(user, token):
+        otp, error = verify_otp(user, code, OTPCode.Purpose.PASSWORD_RESET)
+        if error:
             return APIResponse.error(
-                message="Reset link is invalid or has expired.",
+                message=error,
                 code=ErrorCode.TOKEN_INVALID,
                 status_code=400,
             )
 
-        user.set_password(serializer.validated_data["new_password"])
+        user.set_password(new_password)
         user.save(update_fields=["password"])
 
         try:
@@ -668,66 +668,79 @@ class TokenRefreshView(_TokenRefreshView):
 
 @extend_schema(
     tags=["Authentication"],
-    summary="Resend email verification link",
+    summary="Resend OTP code",
     description=(
-        "Sends a new verification email to the given address if the account exists "
-        "and has not yet been verified. Always returns 200 for unknown addresses to "
-        "avoid leaking whether an email is registered. "
-        "TODO: add rate limiting before production."
+        "Request a new OTP code. Rate limited — 60 second cooldown between requests. "
+        "Set purpose to 'email_verification' or 'password_reset'. "
+        "Always returns 200 for unknown addresses to avoid leaking whether an email "
+        "is registered."
     ),
     request=inline_serializer(
-        name="ResendVerificationRequest",
-        fields={"email": drf_serializers.EmailField()},
+        name="ResendOTPRequest",
+        fields={
+            "email": drf_serializers.EmailField(),
+            "purpose": drf_serializers.ChoiceField(
+                choices=["email_verification", "password_reset"],
+                default="email_verification",
+            ),
+        },
     ),
     responses={
-        200: OpenApiResponse(description="Email sent (or silently skipped)"),
-        400: OpenApiResponse(description="Email already verified"),
+        200: OpenApiResponse(description="Code sent (or silently skipped)"),
+        400: OpenApiResponse(description="Email already verified or missing email"),
+        429: OpenApiResponse(description="Cooldown active — try again in 60 seconds"),
     },
     auth=[],
 )
-class ResendVerificationView(APIView):
+class ResendOTPView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get("email", "").strip()
+        from datetime import timedelta
+
+        email = request.data.get("email", "").strip().lower()
+        purpose = request.data.get("purpose", "email_verification")
+
         if not email:
             return APIResponse.error(
-                message="email is required.",
-                errors={"email": ["This field is required."]},
+                message="Email is required.",
                 code=ErrorCode.VALIDATION_ERROR,
-            )
-
-        # Validate email format using DRF's field
-        field = drf_serializers.EmailField()
-        try:
-            email = field.run_validation(email)
-        except drf_serializers.ValidationError:
-            return APIResponse.error(
-                message="Enter a valid email address.",
-                errors={"email": ["Enter a valid email address."]},
-                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
             )
 
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             return APIResponse.success(
-                message=(
-                    "If this email exists and is unverified, "
-                    "a new verification link has been sent."
-                )
+                message="If this email exists, a new code has been sent."
             )
 
-        if user.is_email_verified:
+        if purpose == "email_verification" and user.is_email_verified:
             return APIResponse.error(
                 message="Email is already verified.",
                 code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
             )
 
-        send_verification_email_task.delay(str(user.id))
-        return APIResponse.success(
-            message=(
-                "If this email exists and is unverified, "
-                "a new verification link has been sent."
+        recent = OTPCode.objects.filter(
+            user=user,
+            purpose=purpose,
+            is_used=False,
+            created_at__gte=timezone.now() - timedelta(seconds=60),
+        ).exists()
+
+        if recent:
+            return APIResponse.error(
+                message="Please wait 60 seconds before requesting a new code.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=429,
             )
+
+        if purpose == "email_verification":
+            send_otp_verification_email_task.delay(str(user.id))
+        else:
+            send_otp_password_reset_email_task.delay(str(user.id))
+
+        return APIResponse.success(
+            message="If this email exists, a new code has been sent."
         )

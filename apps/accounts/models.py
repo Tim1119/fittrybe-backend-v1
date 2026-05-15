@@ -3,6 +3,7 @@ Accounts models.
 """
 
 import uuid
+from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
@@ -114,3 +115,78 @@ class User(AbstractUser):
         self.onboarding_status = self.OnboardingStatus.COMPLETED
         self.onboarding_completed_at = timezone.now()
         self.save(update_fields=["onboarding_status", "onboarding_completed_at"])
+
+
+class OTPCode(models.Model):
+    class Purpose(models.TextChoices):
+        EMAIL_VERIFICATION = "email_verification", "Email Verification"
+        PASSWORD_RESET = "password_reset", "Password Reset"
+
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="otp_codes",
+    )
+    code = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=30, choices=Purpose.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    attempts = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def is_valid(self):
+        from django.utils import timezone
+
+        return (
+            not self.is_used and self.expires_at > timezone.now() and self.attempts < 5
+        )
+
+    def __str__(self):
+        return f"{self.user.email} — {self.purpose} — {self.code}"
+
+
+def generate_otp(user, purpose):
+    import random
+
+    from django.utils import timezone
+
+    OTPCode.objects.filter(
+        user=user,
+        purpose=purpose,
+        is_used=False,
+    ).update(is_used=True)
+    code = f"{random.randint(0, 999999):06d}"
+    expires_at = timezone.now() + timedelta(minutes=10)
+    return OTPCode.objects.create(
+        user=user,
+        code=code,
+        purpose=purpose,
+        expires_at=expires_at,
+    )
+
+
+def verify_otp(user, code, purpose):
+    try:
+        otp = OTPCode.objects.filter(
+            user=user,
+            purpose=purpose,
+            is_used=False,
+        ).latest("created_at")
+    except OTPCode.DoesNotExist:
+        return None, "Invalid or expired code."
+
+    otp.attempts += 1
+    otp.save(update_fields=["attempts"])
+
+    if not otp.is_valid():
+        return None, "Code has expired or too many attempts. Request a new code."
+
+    if otp.code != code:
+        return None, "Invalid code."
+
+    otp.is_used = True
+    otp.save(update_fields=["is_used"])
+    return otp, None
