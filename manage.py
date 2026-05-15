@@ -15,7 +15,7 @@ def main():
     )
     os.environ.setdefault(
         "DJANGO_SETTINGS_MODULE",
-        env("DJANGO_SETTINGS_MODULE", default="fittrybe_backend.settings.production"),
+        env("DJANGO_SETTINGS_MODULE", default="fittrybe_backend.settings.development"),
     )
     try:
         from django.core.management import execute_from_command_line
