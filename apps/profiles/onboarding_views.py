@@ -142,6 +142,8 @@ class TrainerExpertiseView(APIView):
                     profile.specialisations.all(), many=True
                 ).data,
                 "onboarding_step": user.onboarding_step,
+                "current_step": user.onboarding_step,
+                "total_steps": 2,
             },
             message="Expertise updated.",
         )
@@ -330,6 +332,8 @@ class GymServicesView(APIView):
             data={
                 "services": ServiceSerializer(profile.services.all(), many=True).data,
                 "onboarding_step": user.onboarding_step,
+                "current_step": user.onboarding_step,
+                "total_steps": 2,
             },
             message="Services saved.",
         )
@@ -506,6 +510,8 @@ class ClientGoalView(APIView):
             data={
                 "goals": GoalSerializer(profile.primary_goals.all(), many=True).data,
                 "onboarding_step": user.onboarding_step,
+                "current_step": user.onboarding_step,
+                "total_steps": 2,
             },
             message="Goals updated.",
         )
