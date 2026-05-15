@@ -2,7 +2,7 @@ import os
 
 from celery import Celery
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "fittrybe_backend.settings.development")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "fittrybe_backend.settings.production")
 
 app = Celery("fittrybe_backend")
 app.config_from_object("django.conf:settings", namespace="CELERY")
