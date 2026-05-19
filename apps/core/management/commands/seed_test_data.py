@@ -174,6 +174,13 @@ class Command(BaseCommand):
             offers_products=True,
         )
 
+        from apps.profiles.models import Specialisation
+
+        all_specs = list(Specialisation.objects.filter(is_predefined=True))
+        if all_specs:
+            specs = random.sample(all_specs, min(3, len(all_specs)))
+            profile.specialisations.set(specs)
+
         for day in ["monday", "wednesday", "friday"]:
             Availability.objects.create(
                 gym=profile,

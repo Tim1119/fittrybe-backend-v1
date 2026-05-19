@@ -13,12 +13,8 @@ from rest_framework.views import APIView
 from apps.core.error_codes import ErrorCode
 from apps.core.permissions import IsClient, IsGym, IsTrainer
 from apps.core.responses import APIResponse
-from apps.profiles.models import Goal, Service, Specialisation
-from apps.profiles.serializers import (
-    GoalSerializer,
-    ServiceSerializer,
-    SpecialisationSerializer,
-)
+from apps.profiles.models import Goal, Specialisation
+from apps.profiles.serializers import GoalSerializer, SpecialisationSerializer
 
 
 def _trainer_profile(user):
@@ -235,37 +231,32 @@ class TrainerProductsView(APIView):
 
 
 @extend_schema(
-    summary="Get service options and current services (gym onboarding step 1)",
+    summary="Get service options for onboarding picker (gym step 1)",
     description=(
-        "GET — returns session_type picker options and the gym's current services.\n\n"
-        "POST — replaces all services and advances onboarding_step to 1."
+        "GET — returns all available service/expertise options for the picker screen. "
+        "Use ?is_predefined=true for predefined options only.\n"
+        "POST — attaches selected services to the gym profile and advances "
+        "onboarding to step 1.\n"
+        "Body: {expertise_ids: [1,2,3], custom_names: ['Optional custom service']}"
     ),
     request=inline_serializer(
         name="GymServicesRequest",
         fields={
-            "services": drf_serializers.ListField(
-                child=inline_serializer(
-                    name="ServiceItem",
-                    fields={
-                        "name": drf_serializers.CharField(),
-                        "description": drf_serializers.CharField(
-                            required=False, default=""
-                        ),
-                        "session_type": drf_serializers.ChoiceField(
-                            choices=["physical", "virtual", "both"],
-                            required=False,
-                            default="both",
-                        ),
-                        "display_order": drf_serializers.IntegerField(
-                            required=False, default=0
-                        ),
-                    },
-                )
+            "expertise_ids": drf_serializers.ListField(
+                child=drf_serializers.IntegerField(),
+                required=False,
+                default=list,
+            ),
+            "custom_names": drf_serializers.ListField(
+                child=drf_serializers.CharField(),
+                required=False,
+                default=list,
             ),
         },
     ),
     responses={
-        200: OpenApiResponse(description="Services saved"),
+        200: OpenApiResponse(description="Services updated"),
+        400: OpenApiResponse(description="Exceeds 10-specialisation limit"),
         401: OpenApiResponse(description="Not authenticated"),
         403: OpenApiResponse(description="Not a gym"),
     },
@@ -274,28 +265,16 @@ class TrainerProductsView(APIView):
 class GymServicesView(APIView):
     permission_classes = [IsAuthenticated, IsGym]
 
-    SESSION_TYPE_OPTIONS = [
-        {"value": "physical", "label": "Physical"},
-        {"value": "virtual", "label": "Virtual"},
-        {"value": "both", "label": "Both"},
-    ]
-
     def get(self, request):
-        profile = _gym_profile(request.user)
-        if not profile:
-            return APIResponse.error(
-                message="Profile not found.",
-                code=ErrorCode.NOT_FOUND,
-                status_code=404,
-            )
+        qs = Specialisation.objects.all().order_by("name")
+        is_predefined = request.query_params.get("is_predefined")
+        if is_predefined == "true":
+            qs = qs.filter(is_predefined=True)
+        elif is_predefined == "false":
+            qs = qs.filter(is_predefined=False)
         return APIResponse.success(
-            data={
-                "session_type_options": self.SESSION_TYPE_OPTIONS,
-                "current_services": ServiceSerializer(
-                    profile.services.all(), many=True
-                ).data,
-            },
-            message="Services retrieved.",
+            data={"services": SpecialisationSerializer(qs, many=True).data},
+            message="Service options retrieved.",
         )
 
     def post(self, request):
@@ -308,18 +287,30 @@ class GymServicesView(APIView):
                 status_code=404,
             )
 
-        services_data = request.data.get("services", []) or []
+        expertise_ids = request.data.get("expertise_ids", []) or []
+        custom_names = request.data.get("custom_names", []) or []
+
+        existing_count = profile.specialisations.count()
+        if existing_count + len(expertise_ids) + len(custom_names) > 10:
+            return APIResponse.error(
+                message="You can have at most 10 specialisations.",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=400,
+            )
 
         with transaction.atomic():
-            profile.services.all().delete()
-            for svc in services_data:
-                Service.objects.create(
-                    gym=profile,
-                    name=svc.get("name", ""),
-                    description=svc.get("description", ""),
-                    session_type=svc.get("session_type", Service.SessionType.BOTH),
-                    display_order=svc.get("display_order", 0),
-                )
+            if expertise_ids:
+                specs = Specialisation.objects.filter(id__in=expertise_ids)
+                profile.specialisations.add(*specs)
+
+            for raw_name in custom_names:
+                name = raw_name.strip()
+                if name:
+                    spec, _ = Specialisation.objects.get_or_create(
+                        name=name,
+                        defaults={"is_predefined": False},
+                    )
+                    profile.specialisations.add(spec)
 
             user.onboarding_step = max(user.onboarding_step, 1)
             user.save(update_fields=["onboarding_step"])
@@ -330,12 +321,14 @@ class GymServicesView(APIView):
 
         return APIResponse.success(
             data={
-                "services": ServiceSerializer(profile.services.all(), many=True).data,
+                "services": SpecialisationSerializer(
+                    profile.specialisations.all(), many=True
+                ).data,
                 "onboarding_step": user.onboarding_step,
                 "current_step": user.onboarding_step,
                 "total_steps": 2,
             },
-            message="Services saved.",
+            message="Services updated.",
         )
 
 
@@ -411,7 +404,9 @@ class GymProductsView(APIView):
                 "role": "gym",
                 "full_name": profile.full_name,
                 "location": user.country,
-                "services": ServiceSerializer(profile.services.all(), many=True).data,
+                "services": SpecialisationSerializer(
+                    profile.specialisations.all(), many=True
+                ).data,
             },
             message="Onboarding complete.",
         )

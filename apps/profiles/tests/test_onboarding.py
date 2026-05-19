@@ -284,64 +284,106 @@ class TestGymServicesView:
         resp = api_client.get(GYM_SERVICES_URL)
         assert resp.status_code == 403
 
-    def test_gym_post_creates_services(self, api_client):
+    def test_gym_get_returns_all_specialisations(self, api_client):
         gym = GymFactory()
         GymProfileFactory(user=gym)
-        api_client.force_authenticate(user=gym)
-        payload = {
-            "services": [
-                {
-                    "name": "Personal Training",
-                    "description": "1-on-1",
-                    "session_type": "physical",
-                    "display_order": 1,
-                }
-            ]
-        }
-        resp = api_client.post(GYM_SERVICES_URL, payload, format="json")
-        assert resp.status_code == 200
-        assert len(resp.data["data"]["services"]) == 1
-        assert resp.data["data"]["onboarding_step"] == 1
-
-    def test_gym_post_replaces_existing_services(self, api_client):
-        from apps.profiles.tests.factories import ServiceGymFactory
-
-        gym = GymFactory()
-        gym_profile = GymProfileFactory(user=gym)
-        ServiceGymFactory(gym=gym_profile, name="Old Service")
-        api_client.force_authenticate(user=gym)
-        payload = {"services": [{"name": "New Service", "session_type": "virtual"}]}
-        resp = api_client.post(GYM_SERVICES_URL, payload, format="json")
-        assert resp.status_code == 200
-        names = [s["name"] for s in resp.data["data"]["services"]]
-        assert "New Service" in names
-        assert "Old Service" not in names
-
-    def test_gym_get_returns_current_services(self, api_client):
-        from apps.profiles.tests.factories import ServiceGymFactory
-
-        gym = GymFactory()
-        gym_profile = GymProfileFactory(user=gym)
-        ServiceGymFactory(gym=gym_profile, name="Yoga Class")
+        SpecialisationFactory(name="GymSpec1", is_predefined=True)
+        SpecialisationFactory(name="GymSpec2", is_predefined=True)
         api_client.force_authenticate(user=gym)
         resp = api_client.get(GYM_SERVICES_URL)
         assert resp.status_code == 200
-        assert "session_type_options" in resp.data["data"]
-        names = [s["name"] for s in resp.data["data"]["current_services"]]
-        assert "Yoga Class" in names
+        assert "services" in resp.data["data"]
+        assert isinstance(resp.data["data"]["services"], list)
+        names = [s["name"] for s in resp.data["data"]["services"]]
+        assert "GymSpec1" in names
+        assert "GymSpec2" in names
+
+    def test_gym_get_message(self, api_client):
+        gym = GymFactory()
+        GymProfileFactory(user=gym)
+        api_client.force_authenticate(user=gym)
+        resp = api_client.get(GYM_SERVICES_URL)
+        assert resp.status_code == 200
+        assert resp.data["message"] == "Service options retrieved."
+
+    def test_gym_post_valid_expertise_ids(self, api_client):
+        gym = GymFactory()
+        GymProfileFactory(user=gym)
+        s1 = SpecialisationFactory(name="HIIT Classes")
+        s2 = SpecialisationFactory(name="Yoga Sessions")
+        api_client.force_authenticate(user=gym)
+        resp = api_client.post(
+            GYM_SERVICES_URL,
+            {"expertise_ids": [s1.id, s2.id], "custom_names": []},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert len(resp.data["data"]["services"]) == 2
+        assert resp.data["data"]["onboarding_step"] == 1
 
     def test_gym_post_sets_onboarding_in_progress(self, api_client):
         gym = GymFactory()
         GymProfileFactory(user=gym)
+        s1 = SpecialisationFactory(name="Crossfit")
         api_client.force_authenticate(user=gym)
         api_client.post(
             GYM_SERVICES_URL,
-            {"services": [{"name": "Crossfit", "session_type": "physical"}]},
+            {"expertise_ids": [s1.id], "custom_names": []},
             format="json",
         )
         gym.refresh_from_db()
         assert gym.onboarding_status == "in_progress"
         assert gym.onboarding_step == 1
+
+    def test_gym_post_response_has_step_fields(self, api_client):
+        gym = GymFactory()
+        GymProfileFactory(user=gym)
+        s1 = SpecialisationFactory(name="Boxing")
+        api_client.force_authenticate(user=gym)
+        resp = api_client.post(
+            GYM_SERVICES_URL,
+            {"expertise_ids": [s1.id], "custom_names": []},
+            format="json",
+        )
+        assert resp.status_code == 200
+        data = resp.data["data"]
+        assert "services" in data
+        assert "onboarding_step" in data
+        assert "current_step" in data
+        assert data["total_steps"] == 2
+        assert resp.data["message"] == "Services updated."
+
+    def test_gym_post_exceeds_10_returns_400(self, api_client):
+        gym = GymFactory()
+        GymProfileFactory(user=gym)
+        specs = [SpecialisationFactory().id for _ in range(11)]
+        api_client.force_authenticate(user=gym)
+        resp = api_client.post(
+            GYM_SERVICES_URL,
+            {"expertise_ids": specs, "custom_names": []},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_gym_post_custom_names_creates_and_attaches_specialisation(
+        self, api_client
+    ):
+        gym = GymFactory()
+        GymProfileFactory(user=gym)
+        api_client.force_authenticate(user=gym)
+        resp = api_client.post(
+            GYM_SERVICES_URL,
+            {"expertise_ids": [], "custom_names": ["Aerial Yoga"]},
+            format="json",
+        )
+        assert resp.status_code == 200
+        names = [s["name"] for s in resp.data["data"]["services"]]
+        assert "Aerial Yoga" in names
+        from apps.profiles.models import Specialisation
+
+        assert Specialisation.objects.filter(
+            name="Aerial Yoga", is_predefined=False
+        ).exists()
 
 
 # ---------------------------------------------------------------------------

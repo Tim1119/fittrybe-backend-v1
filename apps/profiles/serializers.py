@@ -175,6 +175,7 @@ class TrainerProfilePublicSerializer(serializers.ModelSerializer):
 class GymProfileSerializer(serializers.ModelSerializer):
     availability = AvailabilitySerializer(many=True, read_only=True)
     services = ServiceSerializer(many=True, read_only=True)
+    specialisations = SpecialisationSerializer(many=True, read_only=True)
     profile_completion_percentage = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
     offers_products = serializers.BooleanField(read_only=True)
@@ -196,6 +197,7 @@ class GymProfileSerializer(serializers.ModelSerializer):
             "avg_rating",
             "rating_count",
             "offers_products",
+            "specialisations",
             "availability",
             "services",
             "profile_completion_percentage",
@@ -224,6 +226,7 @@ class GymProfileSerializer(serializers.ModelSerializer):
 class GymProfilePublicSerializer(serializers.ModelSerializer):
     availability = AvailabilitySerializer(many=True, read_only=True)
     services = ServiceSerializer(many=True, read_only=True)
+    specialisations = SpecialisationSerializer(many=True, read_only=True)
     profile_completion_percentage = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
 
@@ -240,6 +243,7 @@ class GymProfilePublicSerializer(serializers.ModelSerializer):
             "cover_photo_url",
             "avg_rating",
             "rating_count",
+            "specialisations",
             "availability",
             "services",
             "profile_completion_percentage",

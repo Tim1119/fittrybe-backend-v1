@@ -151,6 +151,9 @@ class GymProfile(BaseModel):
     business_email = models.EmailField(blank=True)
     logo_url = models.URLField(blank=True)
     cover_photo_url = models.URLField(blank=True)
+    specialisations = models.ManyToManyField(
+        Specialisation, blank=True, related_name="gyms"
+    )
     is_published = models.BooleanField(default=False, db_index=True)
     avg_rating = models.DecimalField(
         max_digits=3, decimal_places=2, default=Decimal("0.00")
